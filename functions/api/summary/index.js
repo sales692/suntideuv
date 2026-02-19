@@ -43,48 +43,70 @@ export async function onRequestGet({ request, env }) {
   }
 
   /* ---------- MOON PHASE ---------- */
-  try {
-    const moonRes = await fetch(
-      `https://api.farmsense.net/v1/moonphases/?d=${Math.floor(
-        date.getTime() / 1000
-      )}`
-    );
-    const moonJson = await moonRes.json();
-    result.moon = moonJson[0];
-  } catch {
-    result.moon = null;
-  }
+ /* ---------- MOON PHASE (local, no API) ---------- */
+result.moon = calcMoon(dateStr);
+
+function calcMoon(dateStr) {
+  // Approx synodic month model (good for utility display)
+  const epoch = Date.UTC(2000, 0, 6, 18, 14, 0); // near new moon
+  const t = Date.parse(`${dateStr}T12:00:00Z`);
+  const synodic = 29.530588853 * 86400000;
+
+  let age = (t - epoch) % synodic;
+  if (age < 0) age += synodic;
+  const frac = age / synodic; // 0..1
+
+  const illuminationPct = Math.round((1 - Math.cos(2 * Math.PI * frac)) / 2 * 100);
+
+  const phase = (() => {
+    const x = frac * 8;
+    if (x < 0.5) return "New Moon";
+    if (x < 1.5) return "Waxing Crescent";
+    if (x < 2.5) return "First Quarter";
+    if (x < 3.5) return "Waxing Gibbous";
+    if (x < 4.5) return "Full Moon";
+    if (x < 5.5) return "Waning Gibbous";
+    if (x < 6.5) return "Last Quarter";
+    if (x < 7.5) return "Waning Crescent";
+    return "New Moon";
+  })();
+
+  return { phase, illuminationPct };
+}
+
 
   /* ---------- TIDES (Stormglass – coastal only) ---------- */
-  if (env.STORMGLASS_API_KEY) {
-    try {
-      const tideRes = await fetch(
-        `https://api.stormglass.io/v2/tide/extremes/point?lat=${lat}&lng=${lon}&start=${dateStr}&end=${dateStr}`,
-        {
-          headers: {
-            Authorization: env.STORMGLASS_API_KEY
-          }
-        }
-      );
+ /* ---------- TIDES (Stormglass – coastal) ---------- */
+if (env.STORMGLASS_API_KEY) {
+  try {
+    // Build a proper time window: YYYY-MM-DDT00 to next day YYYY-MM-DDT00
+    const startISO = `${dateStr}T00`;
+    const endDate = new Date(dateStr + "T00:00:00Z");
+    endDate.setUTCDate(endDate.getUTCDate() + 1);
+    const endStr = endDate.toISOString().slice(0, 10);
+    const endISO = `${endStr}T00`;
+
+    const tideUrl =
+      `https://api.stormglass.io/v2/tide/extremes/point` +
+      `?lat=${lat}&lng=${lon}&start=${encodeURIComponent(startISO)}` +
+      `&end=${encodeURIComponent(endISO)}&datum=MSL`;
+
+    const tideRes = await fetch(tideUrl, {
+      headers: { Authorization: env.STORMGLASS_API_KEY }
+    });
+
+    if (!tideRes.ok) {
+      const msg = await tideRes.text();
+      result.tides = { available: false, error: msg.slice(0, 200) };
+    } else {
       const tideJson = await tideRes.json();
       result.tides = tideJson.data ?? [];
-    } catch {
-      result.tides = { available: false };
+      result.tideStation = tideJson.meta?.station ?? null;
     }
-  } else {
-    result.tides = { available: false };
+  } catch (e) {
+    result.tides = { available: false, error: String(e) };
   }
-
-  return json(result);
+} else {
+  result.tides = { available: false };
 }
 
-/* ---------- helper ---------- */
-function json(data, status = 200) {
-  return new Response(JSON.stringify(data, null, 2), {
-    status,
-    headers: {
-      "content-type": "application/json",
-      "cache-control": "public, max-age=300"
-    }
-  });
-}
