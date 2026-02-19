@@ -1,1 +1,1 @@
-summary.js
+summary
