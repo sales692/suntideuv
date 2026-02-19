@@ -14,6 +14,7 @@ export async function onRequestGet({ request, env }) {
   const dateStr = date.toISOString().split("T")[0];
 
   const result = {
+    result.build = "2026-02-19-1500";
     location: { lat, lon },
     date: dateStr
   };
