@@ -1,4 +1,4 @@
-export async function onRequestGet({ request, env }) {
+module.exports = { onRequestGet };
   const BUILD = "BUILD-2026-02-20-001";
 export async function onRequestGet({ request, env }) {
   const { searchParams } = new URL(request.url);
@@ -208,3 +208,4 @@ async function getTides(lat, lon, dateStr, tz, apiKey) {
 
   return { available: true, station, today };
 }
+module.exports = { onRequestGet };
