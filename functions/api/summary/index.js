@@ -1,4 +1,6 @@
 export async function onRequestGet({ request, env }) {
+  const BUILD = "BUILD-2026-02-20-001";
+export async function onRequestGet({ request, env }) {
   const { searchParams } = new URL(request.url);
 
   const lat = Number(searchParams.get("lat"));
@@ -51,6 +53,7 @@ function json(data, status = 200, extraHeaders = {}) {
     headers: {
       "content-type": "application/json; charset=utf-8",
       ...extraHeaders
+      result.build = BUILD;
     }
   });
 }
