@@ -1,6 +1,6 @@
 module.exports = { onRequestGet };
   const BUILD = "BUILD-2026-02-20-001";
-export async function onRequestGet({ request, env }) {
+async function onRequestGet({ request, env }) {
   const { searchParams } = new URL(request.url);
 
   const lat = Number(searchParams.get("lat"));
