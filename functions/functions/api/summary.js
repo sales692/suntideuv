@@ -124,3 +124,22 @@ function phaseName(frac) {
   if (x < 7.5) return "Waning Crescent";
   return "New Moon";
 }
+function json(data, status = 200, headers = {}) {
+  return new Response(JSON.stringify(data, null, 2), {
+    status,
+    headers: {
+      "content-type": "application/json; charset=utf-8",
+      "access-control-allow-origin": "*",
+      "access-control-allow-methods": "GET, OPTIONS",
+      "access-control-allow-headers": "content-type",
+      ...headers
+    }
+  });
+}
+export async function onRequestOptions() {
+  return json({ ok: true }, 204);
+}
+const startISO = `${dateStr}T00`;
+const endISO = `${endStr}T00`;
+const startISO = `${dateStr}T00:00:00Z`;
+const endISO = `${endStr}T00:00:00Z`;
