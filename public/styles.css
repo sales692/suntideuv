@@ -44,7 +44,25 @@ body{
     linear-gradient(180deg, #070b14 0%, #0b1220 45%, #081024 100%);
 }
 
-.wrap{max-width:980px;margin:0 auto;padding:18px}
+.wrap{position:relative;
+}
+
+.wrap::before{
+  content:"";
+  position:absolute;
+  left:0;
+  right:0;
+  top:92px;
+  height:1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255,255,255,.14),
+    transparent
+  );
+  opacity:.6;
+  pointer-events:none;
+}
 .brand{display:flex;gap:12px;align-items:center}
 .logo{width:44px;height:44px;display:grid;place-items:center;border-radius:12px;background:rgba(255,255,255,.08);font-size:22px}
 .title{font-weight:900;font-size:20px;letter-spacing:.2px}
