@@ -1,1 +1,78 @@
-<script src="/app.js"></script>
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Sun • Tide • UV • Moon (Australia)</title>
+  <meta name="description" content="Fast Australian sun times, UV index, tide extremes and moon phase. Auto-detect location or search." />
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+
+<body>
+  <div class="container">
+    <div class="card">
+      <h1>Sun • Tide • UV • Moon</h1>
+      <p>Australia-wide utility. Auto-detect location or search a place.</p>
+      <p class="small" id="status">Ready.</p>
+
+      <div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:12px;">
+        <button class="btn primary" id="btnLocate">Use my location</button>
+        <button class="btn" id="btnBrisbane">Use Brisbane</button>
+      </div>
+    </div>
+
+    <div style="height:12px;"></div>
+
+    <div class="row">
+      <div class="card">
+        <div class="small">UV (max today)</div>
+        <div class="kpi" id="uvKpi">—</div>
+        <div class="small" id="uvMeta"></div>
+      </div>
+
+      <div class="card">
+        <div class="small">Moon</div>
+        <div class="kpi" id="moonKpi">—</div>
+        <div class="small" id="moonMeta"></div>
+      </div>
+    </div>
+
+    <div style="height:12px;"></div>
+
+    <div class="row">
+      <div class="card">
+        <div class="small">Sun</div>
+        <table>
+          <tbody>
+            <tr><th>Sunrise</th><td id="sunrise">—</td></tr>
+            <tr><th>Sunset</th><td id="sunset">—</td></tr>
+            <tr><th>Day length</th><td id="daylen">—</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="card">
+        <div class="small">Tides (extremes)</div>
+        <table>
+          <thead>
+            <tr><th>Time</th><th>Type</th><th>Height</th></tr>
+          </thead>
+          <tbody id="tidesTable">
+            <tr><td colspan="3" class="small">No data yet.</td></tr>
+          </tbody>
+        </table>
+        <div class="small" id="stationMeta" style="margin-top:8px;"></div>
+      </div>
+    </div>
+
+    <div style="height:16px;"></div>
+
+    <div class="small" style="text-align:center; opacity:.8;">
+      Data sources: sunrise-sunset.org, Open-Meteo, Stormglass (tides).<br/>
+      © suntideuv
+    </div>
+  </div>
+
+  <script src="/app.js"></script>
+</body>
+</html>
