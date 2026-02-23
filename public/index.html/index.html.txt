@@ -1,1 +1,10 @@
-index.html
+<!doctype html>
+<html>
+  <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>suntideuv1</title></head>
+  <body style="font-family:system-ui;padding:24px">
+    <h1>Static site is working ✅</h1>
+    <p><a href="/hello">Test /hello</a></p>
+    <p><a href="/api/summary?lat=-27.381&lon=153.181&day=0">Test /api/summary</a></p>
+  </body>
+</html>
