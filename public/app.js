@@ -2,11 +2,8 @@ const DEFAULT = { name: "Brisbane", lat: -27.4698, lon: 153.0251 };
 
 const el = (id) => document.getElementById(id);
 
+// Elements
 const loading = el("loading");
-
-function showLoading(on) {
-  loading.classList.toggle("hidden", !on);
-}
 
 const pillStatus = el("pillStatus");
 const pillPlace = el("pillPlace");
@@ -30,41 +27,32 @@ const sunsetVal1 = el("sunsetVal1");
 const uvVal1 = el("uvVal1");
 const moonVal1 = el("moonVal1");
 
-el("btnLocate").addEventListener("click", () => locateAndLoad());
-el("btnBrisbane").addEventListener("click", () =>
-  loadFor(DEFAULT.lat, DEFAULT.lon, DEFAULT.name)
-);
-async function loadFor(lat, lon, label) {
-  try {
-    showLoading(true);
-    setStatus("Loading…");
-    pillPlace.textContent = `Location: ${label} (${lat}, ${lon})`;
-
-    const [today, tomorrow] = await Promise.all([
-      fetchSummaryCached(lat, lon, 0),
-      fetchSummaryCached(lat, lon, 1)
-    ]);
-
-    render(today);
-    renderTomorrow(tomorrow);
-
-    setStatus("Updated");
-  } catch (err) {
-    console.error(err);
-    setStatus("Error");
-    alert("Could not load data. Please try again.");
-  } finally {
-    showLoading(false);
-  }
+// UI helpers
+function showLoading(on) {
+  if (!loading) return;
+  loading.classList.toggle("hidden", !on);
 }
 
+function setStatus(text) {
+  if (pillStatus) pillStatus.textContent = text;
+}
+
+// Buttons
+el("btnLocate")?.addEventListener("click", () => locateAndLoad());
+el("btnBrisbane")?.addEventListener("click", () =>
+  loadFor(DEFAULT.lat, DEFAULT.lon, DEFAULT.name)
+);
+
+// Start
 init();
 
 async function init() {
-  pillStatus.textContent = "Getting location…";
+  setStatus("Getting location…");
+  showLoading(true);
   await locateAndLoad({ quietFail: true });
 }
 
+// Location
 async function locateAndLoad({ quietFail = false } = {}) {
   if (!navigator.geolocation) {
     if (!quietFail) alert("Geolocation not supported. Using Brisbane.");
@@ -85,18 +73,20 @@ async function locateAndLoad({ quietFail = false } = {}) {
   );
 }
 
+// Main loader (Today + Tomorrow)
 async function loadFor(lat, lon, label) {
   try {
+    showLoading(true);
     setStatus("Loading…");
-    pillPlace.textContent = `Location: ${label} (${lat}, ${lon})`;
 
-    // today + tomorrow
+    if (pillPlace) pillPlace.textContent = `Location: ${label} (${lat}, ${lon})`;
+
     const [today, tomorrow] = await Promise.all([
-      fetchSummary(lat, lon, 0),
-      fetchSummary(lat, lon, 1)
+      fetchSummaryCached(lat, lon, 0),
+      fetchSummaryCached(lat, lon, 1),
     ]);
 
-    render(today, { dayLabel: "Today" });
+    renderToday(today);
     renderTomorrow(tomorrow);
 
     setStatus("Updated");
@@ -104,93 +94,148 @@ async function loadFor(lat, lon, label) {
     console.error(err);
     setStatus("Error");
     alert("Could not load data. Please try again.");
+  } finally {
+    showLoading(false);
   }
 }
 
+// API fetch
 async function fetchSummary(lat, lon, day) {
-  const url = `/api/summary?lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}&day=${encodeURIComponent(day)}&v=1`;
-  const res = await fetch(url, { headers: { "accept": "application/json" } });
+  const url =
+    `/api/summary?lat=${encodeURIComponent(lat)}` +
+    `&lon=${encodeURIComponent(lon)}` +
+    `&day=${encodeURIComponent(day)}` +
+    `&v=1`;
+
+  const res = await fetch(url, { headers: { accept: "application/json" } });
+
   if (!res.ok) {
     const text = await res.text();
     throw new Error(`API ${res.status}: ${text.slice(0, 200)}`);
   }
+
   return res.json();
 }
 
-function render(data) {
-  pillDate.textContent = `Date: ${prettyDateFromISO(data.date)}`;
+// Local cache (10 min)
+function cacheKey(lat, lon, day) {
+  const rLat = Math.round(lat * 100) / 100;
+  const rLon = Math.round(lon * 100) / 100;
+  return `suntideuv:v1:${rLat}:${rLon}:d${day}`;
+}
+
+async function fetchSummaryCached(lat, lon, day) {
+  const key = cacheKey(lat, lon, day);
+  const now = Date.now();
+
+  try {
+    const cached = JSON.parse(localStorage.getItem(key) || "null");
+    if (cached && cached.exp > now && cached.data) return cached.data;
+  } catch {
+    // ignore cache parse errors
+  }
+
+  const data = await fetchSummary(lat, lon, day);
+
+  try {
+    localStorage.setItem(
+      key,
+      JSON.stringify({
+        exp: now + 10 * 60 * 1000,
+        data,
+      })
+    );
+  } catch {
+    // ignore quota errors
+  }
+
+  return data;
+}
+
+// Render: Today
+function renderToday(data) {
+  if (!data) return;
+
+  if (pillDate) pillDate.textContent = `Date: ${prettyDateFromISO(data.date)}`;
 
   // Sun
-  sunriseVal.textContent = fmtTimeLocal(data?.sun?.sunrise);
-  sunsetVal.textContent = fmtTimeLocal(data?.sun?.sunset);
+  if (sunriseVal) sunriseVal.textContent = fmtTimeLocal(data?.sun?.sunrise);
+  if (sunsetVal) sunsetVal.textContent = fmtTimeLocal(data?.sun?.sunset);
 
   // UV
   const uv = data?.uv?.max;
-  uvVal.textContent = isNum(uv) ? uv.toFixed(1) : "—";
-  uvHint.textContent = isNum(uv) ? uvCategory(uv) : "—";
+  if (uvVal) uvVal.textContent = isNum(uv) ? uv.toFixed(1) : "—";
+  if (uvHint) uvHint.textContent = isNum(uv) ? uvCategory(uv) : "—";
 
   // Moon
-  moonVal.textContent = data?.moon?.phase ?? "—";
-  moonHint.textContent = isNum(data?.moon?.illuminationPct)
-    ? `${data.moon.illuminationPct}% illuminated`
-    : "—";
+  if (moonVal) moonVal.textContent = data?.moon?.phase ?? "—";
+  if (moonHint) {
+    moonHint.textContent = isNum(data?.moon?.illuminationPct)
+      ? `${data.moon.illuminationPct}% illuminated`
+      : "—";
+  }
 
   // Tides
   renderTides(data);
 }
 
+// Render: Tomorrow
 function renderTomorrow(data) {
-  sunriseVal1.textContent = fmtTimeLocal(data?.sun?.sunrise);
-  sunsetVal1.textContent = fmtTimeLocal(data?.sun?.sunset);
+  if (!data) return;
+
+  if (sunriseVal1) sunriseVal1.textContent = fmtTimeLocal(data?.sun?.sunrise);
+  if (sunsetVal1) sunsetVal1.textContent = fmtTimeLocal(data?.sun?.sunset);
 
   const uv = data?.uv?.max;
-  uvVal1.textContent = isNum(uv) ? uv.toFixed(1) : "—";
+  if (uvVal1) uvVal1.textContent = isNum(uv) ? uv.toFixed(1) : "—";
 
-  moonVal1.textContent = data?.moon?.phase ?? "—";
+  if (moonVal1) moonVal1.textContent = data?.moon?.phase ?? "—";
 }
 
+// Render: Tides
 function renderTides(data) {
+  if (!tidesList || !tidesEmpty) return;
+
   tidesList.innerHTML = "";
   tidesEmpty.classList.add("hidden");
 
   const station = data?.tideStation?.name;
-  tideStation.textContent = station ? `Station: ${station}` : "Station: —";
+  if (tideStation) tideStation.textContent = station ? `Station: ${station}` : "Station: —";
 
   const tides = Array.isArray(data?.tides) ? data.tides : [];
 
   if (tides.length === 0) {
     tidesEmpty.classList.remove("hidden");
-    nextTide.textContent = "—";
-    nextTideHint.textContent = "—";
+    if (nextTide) nextTide.textContent = "—";
+    if (nextTideHint) nextTideHint.textContent = "—";
     return;
   }
 
-  // Build rows for "today" only (match data.date)
+  // Show today's tides first (matching data.date)
   const todayISO = data.date;
-  const todays = tides.filter(t => (t?.time || "").startsWith(todayISO));
-
+  const todays = tides.filter((t) => (t?.time || "").startsWith(todayISO));
   const list = todays.length ? todays : tides.slice(0, 6);
 
   for (const t of list) {
     const time = fmtTimeLocal(t.time);
     const h = isNum(t.height) ? `${t.height.toFixed(2)} m` : "—";
     const type = (t.type || "").toUpperCase() || "—";
-    tidesList.appendChild(row(`${time}`, h, type));
+    tidesList.appendChild(row(time, h, type));
   }
 
   // Next tide based on now
   const now = Date.now();
   const next = tides
-    .map(t => ({ ...t, ms: Date.parse(t.time) }))
-    .filter(t => Number.isFinite(t.ms) && t.ms > now)
+    .map((t) => ({ ...t, ms: Date.parse(t.time) }))
+    .filter((t) => Number.isFinite(t.ms) && t.ms > now)
     .sort((a, b) => a.ms - b.ms)[0];
 
   if (next) {
-    nextTide.textContent = `${fmtTimeLocal(next.time)} • ${next.type.toUpperCase()}`;
-    nextTideHint.textContent = isNum(next.height) ? `${next.height.toFixed(2)} m` : "";
+    if (nextTide) nextTide.textContent = `${fmtTimeLocal(next.time)} • ${String(next.type || "").toUpperCase()}`;
+    if (nextTideHint) nextTideHint.textContent = isNum(next.height) ? `${next.height.toFixed(2)} m` : "";
   } else {
-    nextTide.textContent = "No upcoming tide found";
-    nextTideHint.textContent = "";
+    if (nextTide) nextTide.textContent = "No upcoming tide found";
+    if (nextTideHint) nextTideHint.textContent = "";
   }
 }
 
@@ -205,10 +250,7 @@ function row(left, mid, tag) {
   return div;
 }
 
-function setStatus(text) {
-  pillStatus.textContent = text;
-}
-
+// Formatting helpers
 function fmtTimeLocal(iso) {
   if (!iso) return "—";
   const d = new Date(iso);
@@ -217,7 +259,6 @@ function fmtTimeLocal(iso) {
 }
 
 function prettyDateFromISO(yyyy_mm_dd) {
-  // interpret as local date
   const [y, m, d] = (yyyy_mm_dd || "").split("-").map(Number);
   if (!y || !m || !d) return "—";
   const dt = new Date(y, m - 1, d);
@@ -243,36 +284,12 @@ function round(x, dp) {
 
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({
-    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;"
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#039;",
   }[c]));
 }
-function cacheKey(lat, lon, day) {
-  // small rounding so cache hits even with slightly different GPS precision
-  const rLat = Math.round(lat * 100) / 100;
-  const rLon = Math.round(lon * 100) / 100;
-  return `suntideuv:v1:${rLat}:${rLon}:d${day}`;
-}
-
-async function fetchSummaryCached(lat, lon, day) {
-  const key = cacheKey(lat, lon, day);
-  const now = Date.now();
-
-  // Try cache (10 minutes)
-  try {
-    const cached = JSON.parse(localStorage.getItem(key) || "null");
-    if (cached && cached.exp > now && cached.data) return cached.data;
-  } catch {}
-
-  // Fetch fresh
-  const data = await fetchSummary(lat, lon, day);
-
-  // Save cache
-  try {
-    localStorage.setItem(key, JSON.stringify({
-      exp: now + 10 * 60 * 1000,
-      data
-    }));
-  } catch {}
-
   return data;
 }
