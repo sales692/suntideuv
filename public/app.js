@@ -2,6 +2,12 @@ const DEFAULT = { name: "Brisbane", lat: -27.4698, lon: 153.0251 };
 
 const el = (id) => document.getElementById(id);
 
+const loading = el("loading");
+
+function showLoading(on) {
+  loading.classList.toggle("hidden", !on);
+}
+
 const pillStatus = el("pillStatus");
 const pillPlace = el("pillPlace");
 const pillDate = el("pillDate");
@@ -25,7 +31,32 @@ const uvVal1 = el("uvVal1");
 const moonVal1 = el("moonVal1");
 
 el("btnLocate").addEventListener("click", () => locateAndLoad());
-el("btnBrisbane").addEventListener("click", () => loadFor(DEFAULT.lat, DEFAULT.lon, DEFAULT.name));
+el("btnBrisbane").addEventListener("click", () =>
+  loadFor(DEFAULT.lat, DEFAULT.lon, DEFAULT.name)
+);
+async function loadFor(lat, lon, label) {
+  try {
+    showLoading(true);
+    setStatus("Loading…");
+    pillPlace.textContent = `Location: ${label} (${lat}, ${lon})`;
+
+    const [today, tomorrow] = await Promise.all([
+      fetchSummaryCached(lat, lon, 0),
+      fetchSummaryCached(lat, lon, 1)
+    ]);
+
+    render(today);
+    renderTomorrow(tomorrow);
+
+    setStatus("Updated");
+  } catch (err) {
+    console.error(err);
+    setStatus("Error");
+    alert("Could not load data. Please try again.");
+  } finally {
+    showLoading(false);
+  }
+}
 
 init();
 
@@ -214,4 +245,34 @@ function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({
     "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;"
   }[c]));
+}
+function cacheKey(lat, lon, day) {
+  // small rounding so cache hits even with slightly different GPS precision
+  const rLat = Math.round(lat * 100) / 100;
+  const rLon = Math.round(lon * 100) / 100;
+  return `suntideuv:v1:${rLat}:${rLon}:d${day}`;
+}
+
+async function fetchSummaryCached(lat, lon, day) {
+  const key = cacheKey(lat, lon, day);
+  const now = Date.now();
+
+  // Try cache (10 minutes)
+  try {
+    const cached = JSON.parse(localStorage.getItem(key) || "null");
+    if (cached && cached.exp > now && cached.data) return cached.data;
+  } catch {}
+
+  // Fetch fresh
+  const data = await fetchSummary(lat, lon, day);
+
+  // Save cache
+  try {
+    localStorage.setItem(key, JSON.stringify({
+      exp: now + 10 * 60 * 1000,
+      data
+    }));
+  } catch {}
+
+  return data;
 }
