@@ -1,107 +1,115 @@
 <!doctype html>
-<html lang="en">
+<html lang="en-AU">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Sun • Tide • UV • Moon (Australia)</title>
-  <meta name="description" content="Australian sun times, UV, tide extremes and moon phase. Auto-detect location or use Brisbane." />
+  <title>Sun • Tide • UV (Australia)</title>
+  <meta name="description" content="Instant sunrise/sunset, UV index, moon phase and tides for your location in Australia." />
   <link rel="stylesheet" href="/styles.css" />
 </head>
+
 <body>
-
-  <div class="container">
-    <div class="card">
-      <div class="top">
-        <div>
-          <h1>Sun • Tide • UV • Moon</h1>
-          <div class="muted" id="pillPlace">Location: —</div>
-          <div class="muted" id="pillDate">Date: —</div>
-        </div>
-        <div class="pills">
-          <span class="pill" id="pillStatus">Ready</span>
-        </div>
-      </div>
-
-      <div class="actions">
-        <button class="btn primary" id="btnLocate">Use my location</button>
-        <button class="btn" id="btnBrisbane">Use Brisbane</button>
+  <header class="wrap">
+    <div class="brand">
+      <div class="logo">☀️</div>
+      <div>
+        <div class="title">Sun • Tide • UV</div>
+        <div class="subtitle">Australia utility</div>
       </div>
     </div>
 
-    <div class="gap"></div>
-
-    <div class="grid2">
-      <div class="card">
-        <div class="label">UV (max today)</div>
-        <div class="kpi" id="uvVal">—</div>
-        <div class="muted" id="uvHint">—</div>
-      </div>
-
-      <div class="card">
-        <div class="label">Moon</div>
-        <div class="kpi" id="moonVal">—</div>
-        <div class="muted" id="moonHint">—</div>
-      </div>
+    <div class="controls">
+      <button id="btnLocate" class="btn primary">Use my location</button>
+      <button id="btnBrisbane" class="btn">Brisbane</button>
     </div>
 
-    <div class="gap"></div>
+    <div class="pills">
+      <span class="pill" id="pillStatus">Loading…</span>
+      <span class="pill" id="pillPlace">Location: —</span>
+      <span class="pill" id="pillDate">Date: —</span>
+    </div>
+  </header>
 
-    <div class="grid2">
-      <div class="card">
-        <div class="label">Sun (Today)</div>
-        <div class="kv">
-          <div>Sunrise</div><div id="sunriseVal">—</div>
-          <div>Sunset</div><div id="sunsetVal">—</div>
+  <main class="wrap grid">
+    <section class="card">
+      <h2>Today</h2>
+      <div class="kpis">
+        <div class="kpi">
+          <div class="kpiLabel">Sunrise</div>
+          <div class="kpiValue" id="sunriseVal">—</div>
+        </div>
+        <div class="kpi">
+          <div class="kpiLabel">Sunset</div>
+          <div class="kpiValue" id="sunsetVal">—</div>
+        </div>
+        <div class="kpi">
+          <div class="kpiLabel">UV max</div>
+          <div class="kpiValue" id="uvVal">—</div>
+          <div class="kpiHint" id="uvHint">—</div>
+        </div>
+        <div class="kpi">
+          <div class="kpiLabel">Moon</div>
+          <div class="kpiValue" id="moonVal">—</div>
+          <div class="kpiHint" id="moonHint">—</div>
         </div>
       </div>
+    </section>
 
-      <div class="card">
-        <div class="label">Next tide</div>
-        <div class="kpi" id="nextTide">—</div>
-        <div class="muted" id="nextTideHint">—</div>
-        <div class="muted" style="margin-top:8px" id="tideStation">Station: —</div>
-      </div>
-    </div>
+    <section class="card">
+      <h2>Next tide</h2>
+      <div class="big" id="nextTide">—</div>
+      <div class="muted" id="nextTideHint">—</div>
+      <div class="muted" id="tideStation">Station: —</div>
 
-    <div class="gap"></div>
+      <div class="divider"></div>
 
-    <div class="card">
-      <div class="label">Tides (Today)</div>
+      <h3>Today’s tides</h3>
+      <div id="tidesEmpty" class="empty hidden">No tide data available for this location.</div>
+      <div id="tidesList" class="list"></div>
+    </section>
 
-      <div id="tidesEmpty" class="muted">No tide data yet.</div>
-      <div id="tidesList" class="tides"></div>
-    </div>
-
-    <div class="gap"></div>
-
-    <div class="card">
-      <div class="label">Tomorrow</div>
-      <div class="grid4">
-        <div>
-          <div class="muted">Sunrise</div>
-          <div class="big" id="sunriseVal1">—</div>
+    <section class="card">
+      <h2>Tomorrow</h2>
+      <div class="kpis">
+        <div class="kpi">
+          <div class="kpiLabel">Sunrise</div>
+          <div class="kpiValue" id="sunriseVal1">—</div>
         </div>
-        <div>
-          <div class="muted">Sunset</div>
-          <div class="big" id="sunsetVal1">—</div>
+        <div class="kpi">
+          <div class="kpiLabel">Sunset</div>
+          <div class="kpiValue" id="sunsetVal1">—</div>
         </div>
-        <div>
-          <div class="muted">UV</div>
-          <div class="big" id="uvVal1">—</div>
+        <div class="kpi">
+          <div class="kpiLabel">UV max</div>
+          <div class="kpiValue" id="uvVal1">—</div>
         </div>
-        <div>
-          <div class="muted">Moon</div>
-          <div class="big" id="moonVal1">—</div>
+        <div class="kpi">
+          <div class="kpiLabel">Moon</div>
+          <div class="kpiValue" id="moonVal1">—</div>
         </div>
       </div>
-    </div>
+    </section>
 
-    <div class="gap"></div>
+    <section class="card">
+      <h2>Tip</h2>
+      <p class="muted">
+        If your location is blocked, we’ll automatically fall back to Brisbane.
+        You can add more quick buttons later (Gold Coast, Sunshine Coast, Sydney, Perth, etc).
+      </p>
+      <div class="divider"></div>
+      <p class="muted small">
+        Data sources: Sunrise-Sunset, Open-Meteo UV, Stormglass tides.
+      </p>
+    </section>
+  </main>
 
-    <div class="footer muted">
-      Data: sunrise-sunset.org • Open-Meteo • Stormglass • Moon is calculated<br>
-      © suntideuv
-    </div>
+  <footer class="wrap footer">
+    <div class="muted small">© SuntideUV • Built on Cloudflare Pages</div>
+  </footer>
+
+  <div id="loading" class="loading hidden">
+    <div class="spinner"></div>
+    <div>Loading…</div>
   </div>
 
   <script src="/app.js"></script>
