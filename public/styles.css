@@ -44,8 +44,7 @@ body{
     linear-gradient(180deg, #070b14 0%, #0b1220 45%, #081024 100%);
 }
 
-.wrap{position:relative;
-}
+.wrap{ position:relative; }
 
 .wrap::before{
   content:"";
@@ -113,7 +112,9 @@ body{
   .card:nth-child(3){grid-column: span 6;}
   .card:nth-child(4){grid-column: span 6;}
 }
-
+.card{
+  box-shadow: 0 10px 30px rgba(0,0,0,.25);
+}
 h2{margin:0 0 12px 0;font-size:16px}
 h3{margin:0 0 10px 0;font-size:14px;color:var(--muted);font-weight:800}
 
@@ -228,17 +229,22 @@ h1{ margin:0 0 6px 0; font-size:22px; letter-spacing:.2px; }
   display:grid;
   grid-template-columns:repeat(12,1fr);
   gap:14px;
-  padding-top:12px;
+  padding-top:8px;
 }
 
 .card{
   grid-column: span 12;
+  background:rgba(255,255,255,.05);
+  border:1px solid var(--line);
+  border-radius:18px;
+  padding:16px;
+  backdrop-filter: blur(6px);
 }
-
 @media (min-width:860px){
-  .grid .card:nth-child(1){ grid-column: span 6; }
-  .grid .card:nth-child(2){ grid-column: span 6; }
-  .grid .card:nth-child(3){ grid-column: span 12; } /* tides wide */
+  .card:nth-child(1){grid-column: span 6;}
+  .card:nth-child(2){grid-column: span 6;}
+  .card:nth-child(3){grid-column: span 6;}
+  .card:nth-child(4){grid-column: span 6;}
 }
 
 .card-wide{
