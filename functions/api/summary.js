@@ -87,7 +87,10 @@ export async function onRequestGet({ request, env }) {
     }
   }
 
-  return json(result, 200, { "cache-control": "no-store" });
+  return json(result, 200, {
+  // allow Cloudflare to cache for 10 mins at the edge
+  "cache-control": "public, max-age=0, s-maxage=600"
+});
 }
 
 function json(data, status = 200, headers = {}) {
