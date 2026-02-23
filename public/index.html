@@ -1,115 +1,99 @@
 <!doctype html>
-<html lang="en-AU">
+<html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Sun • Tide • UV (Australia)</title>
-  <meta name="description" content="Instant sunrise/sunset, UV index, moon phase and tides for your location in Australia." />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Sun • Tide • UV • Moon</title>
   <link rel="stylesheet" href="/styles.css" />
 </head>
-
 <body>
-  <header class="wrap">
-    <div class="brand">
-      <div class="logo">☀️</div>
+
+  <div class="wrap">
+    <header class="top">
       <div>
-        <div class="title">Sun • Tide • UV</div>
-        <div class="subtitle">Australia utility</div>
+        <h1>Sun • Tide • UV • Moon</h1>
+        <p class="sub">Quick daily conditions for your location (or Brisbane as a fallback).</p>
       </div>
-    </div>
 
-    <div class="controls">
-      <button id="btnLocate" class="btn primary">Use my location</button>
-      <button id="btnBrisbane" class="btn">Brisbane</button>
-    </div>
+      <div class="actions">
+        <button id="btnLocate" class="btn">Use my location</button>
+        <button id="btnBrisbane" class="btn btn-ghost">Brisbane</button>
+      </div>
+    </header>
 
-    <div class="pills">
+    <section class="pills">
       <span class="pill" id="pillStatus">Loading…</span>
       <span class="pill" id="pillPlace">Location: —</span>
       <span class="pill" id="pillDate">Date: —</span>
+    </section>
+
+    <!-- loading overlay -->
+    <div id="loading" class="loading hidden" aria-live="polite">
+      <div class="spinner"></div>
+      <div>Loading latest data…</div>
     </div>
-  </header>
 
-  <main class="wrap grid">
-    <section class="card">
-      <h2>Today</h2>
-      <div class="kpis">
-        <div class="kpi">
-          <div class="kpiLabel">Sunrise</div>
-          <div class="kpiValue" id="sunriseVal">—</div>
-        </div>
-        <div class="kpi">
-          <div class="kpiLabel">Sunset</div>
-          <div class="kpiValue" id="sunsetVal">—</div>
-        </div>
-        <div class="kpi">
-          <div class="kpiLabel">UV max</div>
-          <div class="kpiValue" id="uvVal">—</div>
-          <div class="kpiHint" id="uvHint">—</div>
-        </div>
-        <div class="kpi">
-          <div class="kpiLabel">Moon</div>
-          <div class="kpiValue" id="moonVal">—</div>
-          <div class="kpiHint" id="moonHint">—</div>
-        </div>
-      </div>
-    </section>
+    <main class="grid">
+      <section class="card">
+        <h2>Today</h2>
 
-    <section class="card">
-      <h2>Next tide</h2>
-      <div class="big" id="nextTide">—</div>
-      <div class="muted" id="nextTideHint">—</div>
-      <div class="muted" id="tideStation">Station: —</div>
+        <div class="kv">
+          <div class="k">Sunrise</div>
+          <div class="v" id="sunriseVal">—</div>
 
-      <div class="divider"></div>
+          <div class="k">Sunset</div>
+          <div class="v" id="sunsetVal">—</div>
 
-      <h3>Today’s tides</h3>
-      <div id="tidesEmpty" class="empty hidden">No tide data available for this location.</div>
-      <div id="tidesList" class="list"></div>
-    </section>
+          <div class="k">UV Max</div>
+          <div class="v"><span id="uvVal">—</span> <span class="muted" id="uvHint">—</span></div>
 
-    <section class="card">
-      <h2>Tomorrow</h2>
-      <div class="kpis">
-        <div class="kpi">
-          <div class="kpiLabel">Sunrise</div>
-          <div class="kpiValue" id="sunriseVal1">—</div>
+          <div class="k">Moon</div>
+          <div class="v"><span id="moonVal">—</span> <span class="muted" id="moonHint">—</span></div>
         </div>
-        <div class="kpi">
-          <div class="kpiLabel">Sunset</div>
-          <div class="kpiValue" id="sunsetVal1">—</div>
-        </div>
-        <div class="kpi">
-          <div class="kpiLabel">UV max</div>
-          <div class="kpiValue" id="uvVal1">—</div>
-        </div>
-        <div class="kpi">
-          <div class="kpiLabel">Moon</div>
-          <div class="kpiValue" id="moonVal1">—</div>
-        </div>
-      </div>
-    </section>
+      </section>
 
-    <section class="card">
-      <h2>Tip</h2>
-      <p class="muted">
-        If your location is blocked, we’ll automatically fall back to Brisbane.
-        You can add more quick buttons later (Gold Coast, Sunshine Coast, Sydney, Perth, etc).
-      </p>
-      <div class="divider"></div>
-      <p class="muted small">
-        Data sources: Sunrise-Sunset, Open-Meteo UV, Stormglass tides.
-      </p>
-    </section>
-  </main>
+      <section class="card">
+        <h2>Tomorrow</h2>
 
-  <footer class="wrap footer">
-    <div class="muted small">© SuntideUV • Built on Cloudflare Pages</div>
-  </footer>
+        <div class="kv">
+          <div class="k">Sunrise</div>
+          <div class="v" id="sunriseVal1">—</div>
 
-  <div id="loading" class="loading hidden">
-    <div class="spinner"></div>
-    <div>Loading…</div>
+          <div class="k">Sunset</div>
+          <div class="v" id="sunsetVal1">—</div>
+
+          <div class="k">UV Max</div>
+          <div class="v" id="uvVal1">—</div>
+
+          <div class="k">Moon</div>
+          <div class="v" id="moonVal1">—</div>
+        </div>
+      </section>
+
+      <section class="card card-wide">
+        <h2>Tides</h2>
+
+        <div class="tide-top">
+          <div class="tide-next">
+            <div class="k">Next tide</div>
+            <div class="v" id="nextTide">—</div>
+            <div class="muted" id="nextTideHint">—</div>
+          </div>
+
+          <div class="tide-station muted" id="tideStation">Station: —</div>
+        </div>
+
+        <div id="tidesEmpty" class="empty hidden">
+          No tide data returned for this location.
+        </div>
+
+        <div id="tidesList" class="tides"></div>
+      </section>
+    </main>
+
+    <footer class="foot muted">
+      Data sources: sunrise-sunset.org • open-meteo • stormglass (tides)
+    </footer>
   </div>
 
   <script src="/app.js"></script>
