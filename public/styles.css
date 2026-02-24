@@ -10,35 +10,11 @@
 
 *{box-sizing:border-box}
 html,body{height:100%}
-body{
-  margin:0;
-  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
-  color:var(--text);
-
+body {
   background:
-    /* soft moon halo (top-right) */
-    radial-gradient(520px 520px at 86% 12%,
-      rgba(210, 220, 255, .16),
-      transparent 60%),
-
-    /* sunrise glow near horizon */
-    radial-gradient(900px 520px at 50% 18%,
-      rgba(255, 210, 120, .12),
-      transparent 62%),
-
-    /* ocean blue wash */
-    radial-gradient(900px 700px at 25% 10%,
-      rgba(78,161,255,.16),
-      transparent 60%),
-
-    /* subtle wave bands */
-    repeating-linear-gradient(
-      180deg,
-      rgba(255,255,255,.035) 0px,
-      rgba(255,255,255,.035) 1px,
-      transparent 10px,
-      transparent 34px
-    ),
+    linear-gradient(rgba(7,11,20,0.55), rgba(7,11,20,0.75)),
+    url("/bg-ocean-sun-moon.jpg") center / cover no-repeat fixed;
+}
 
     /* deep ocean base */
     linear-gradient(180deg, #070b14 0%, #0b1220 45%, #081024 100%);
