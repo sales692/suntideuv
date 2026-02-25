@@ -1,58 +1,60 @@
 const DEFAULT = { name: "Brisbane", lat: -27.4698, lon: 153.0251 };
 
 const el = (id) => document.getElementById(id);
+const must = (id) => {
+  const node = el(id);
+  if (!node) throw new Error(`Missing element #${id} in index.html`);
+  return node;
+};
 
-// Elements
-const loading = el("loading");
+// Required elements (matches your index.html)
+const loading = must("loading");
 
-const pillStatus = el("pillStatus");
-const pillPlace = el("pillPlace");
-const pillDate = el("pillDate");
+const pillStatus = must("pillStatus");
+const pillPlace = must("pillPlace");
+const pillDate = must("pillDate");
 
-const sunriseVal = el("sunriseVal");
-const sunsetVal = el("sunsetVal");
-const uvVal = el("uvVal");
-const uvHint = el("uvHint");
-const moonVal = el("moonVal");
-const moonHint = el("moonHint");
+const sunriseVal = must("sunriseVal");
+const sunsetVal = must("sunsetVal");
+const uvVal = must("uvVal");
+const uvHint = must("uvHint");
+const moonVal = must("moonVal");
+const moonHint = must("moonHint");
 
-const nextTide = el("nextTide");
-const nextTideHint = el("nextTideHint");
-const tideStation = el("tideStation");
-const tidesList = el("tidesList");
-const tidesEmpty = el("tidesEmpty");
+const nextTide = must("nextTide");
+const nextTideHint = must("nextTideHint");
+const tideStation = must("tideStation");
+const tidesList = must("tidesList");
+const tidesEmpty = must("tidesEmpty");
 
-const sunriseVal1 = el("sunriseVal1");
-const sunsetVal1 = el("sunsetVal1");
-const uvVal1 = el("uvVal1");
-const moonVal1 = el("moonVal1");
+const sunriseVal1 = must("sunriseVal1");
+const sunsetVal1 = must("sunsetVal1");
+const uvVal1 = must("uvVal1");
+const moonVal1 = must("moonVal1");
 
-// UI helpers
+const btnLocate = must("btnLocate");
+const btnBrisbane = must("btnBrisbane");
+
 function showLoading(on) {
-  if (!loading) return;
   loading.classList.toggle("hidden", !on);
 }
 
 function setStatus(text) {
-  if (pillStatus) pillStatus.textContent = text;
+  pillStatus.textContent = text;
 }
 
-// Buttons
-el("btnLocate")?.addEventListener("click", () => locateAndLoad());
-el("btnBrisbane")?.addEventListener("click", () =>
+btnLocate.addEventListener("click", () => locateAndLoad());
+btnBrisbane.addEventListener("click", () =>
   loadFor(DEFAULT.lat, DEFAULT.lon, DEFAULT.name)
 );
 
-// Start
 init();
 
 async function init() {
   setStatus("Getting location…");
-  showLoading(true);
   await locateAndLoad({ quietFail: true });
 }
 
-// Location
 async function locateAndLoad({ quietFail = false } = {}) {
   if (!navigator.geolocation) {
     if (!quietFail) alert("Geolocation not supported. Using Brisbane.");
@@ -73,13 +75,11 @@ async function locateAndLoad({ quietFail = false } = {}) {
   );
 }
 
-// Main loader (Today + Tomorrow)
 async function loadFor(lat, lon, label) {
   try {
     showLoading(true);
     setStatus("Loading…");
-
-    if (pillPlace) pillPlace.textContent = `Location: ${label} (${lat}, ${lon})`;
+    pillPlace.textContent = `Location: ${label} (${lat}, ${lon})`;
 
     const [today, tomorrow] = await Promise.all([
       fetchSummaryCached(lat, lon, 0),
@@ -91,15 +91,14 @@ async function loadFor(lat, lon, label) {
 
     setStatus("Updated");
   } catch (err) {
-    console.error(err);
+    console.error("Load failed:", err);
     setStatus("Error");
-    alert("Could not load data. Please try again.");
+    alert(`Could not load data.\n\n${String(err.message || err).slice(0, 200)}`);
   } finally {
     showLoading(false);
   }
 }
 
-// API fetch
 async function fetchSummary(lat, lon, day) {
   const url =
     `/api/summary?lat=${encodeURIComponent(lat)}` +
@@ -110,15 +109,14 @@ async function fetchSummary(lat, lon, day) {
   const res = await fetch(url, { headers: { accept: "application/json" } });
 
   if (!res.ok) {
-    const text = await res.text();
+    const text = await res.text().catch(() => "");
     throw new Error(`API ${res.status}: ${text.slice(0, 200)}`);
   }
-
   return res.json();
 }
 
-// Local cache (10 min)
 function cacheKey(lat, lon, day) {
+  // round for better cache hits
   const rLat = Math.round(lat * 100) / 100;
   const rLon = Math.round(lon * 100) / 100;
   return `suntideuv:v1:${rLat}:${rLon}:d${day}`;
@@ -128,114 +126,100 @@ async function fetchSummaryCached(lat, lon, day) {
   const key = cacheKey(lat, lon, day);
   const now = Date.now();
 
+  // Try cache (10 minutes)
   try {
     const cached = JSON.parse(localStorage.getItem(key) || "null");
     if (cached && cached.exp > now && cached.data) return cached.data;
-  } catch {
-    // ignore cache parse errors
-  }
+  } catch {}
 
+  // Fetch fresh
   const data = await fetchSummary(lat, lon, day);
 
+  // Save cache
   try {
     localStorage.setItem(
       key,
-      JSON.stringify({
-        exp: now + 10 * 60 * 1000,
-        data,
-      })
+      JSON.stringify({ exp: now + 10 * 60 * 1000, data })
     );
-  } catch {
-    // ignore quota errors
-  }
+  } catch {}
 
   return data;
 }
 
-// Render: Today
 function renderToday(data) {
-  if (!data) return;
+  pillDate.textContent = `Date: ${prettyDateFromISO(data?.date)}`;
 
-  if (pillDate) pillDate.textContent = `Date: ${prettyDateFromISO(data.date)}`;
+  sunriseVal.textContent = fmtTimeLocal(data?.sun?.sunrise);
+  sunsetVal.textContent = fmtTimeLocal(data?.sun?.sunset);
 
-  // Sun
-  if (sunriseVal) sunriseVal.textContent = fmtTimeLocal(data?.sun?.sunrise);
-  if (sunsetVal) sunsetVal.textContent = fmtTimeLocal(data?.sun?.sunset);
-
-  // UV
   const uv = data?.uv?.max;
-  if (uvVal) uvVal.textContent = isNum(uv) ? uv.toFixed(1) : "—";
-  if (uvHint) uvHint.textContent = isNum(uv) ? uvCategory(uv) : "—";
+  uvVal.textContent = isNum(uv) ? uv.toFixed(1) : "—";
+  uvHint.textContent = isNum(uv) ? uvCategory(uv) : "—";
 
-  // Moon
-  if (moonVal) moonVal.textContent = data?.moon?.phase ?? "—";
-  if (moonHint) {
-    moonHint.textContent = isNum(data?.moon?.illuminationPct)
-      ? `${data.moon.illuminationPct}% illuminated`
-      : "—";
-  }
+  moonVal.textContent = data?.moon?.phase ?? "—";
+  moonHint.textContent = isNum(data?.moon?.illuminationPct)
+    ? `${data.moon.illuminationPct}% illuminated`
+    : "—";
 
-  // Tides
   renderTides(data);
 }
 
-// Render: Tomorrow
 function renderTomorrow(data) {
-  if (!data) return;
-
-  if (sunriseVal1) sunriseVal1.textContent = fmtTimeLocal(data?.sun?.sunrise);
-  if (sunsetVal1) sunsetVal1.textContent = fmtTimeLocal(data?.sun?.sunset);
+  sunriseVal1.textContent = fmtTimeLocal(data?.sun?.sunrise);
+  sunsetVal1.textContent = fmtTimeLocal(data?.sun?.sunset);
 
   const uv = data?.uv?.max;
-  if (uvVal1) uvVal1.textContent = isNum(uv) ? uv.toFixed(1) : "—";
+  uvVal1.textContent = isNum(uv) ? uv.toFixed(1) : "—";
 
-  if (moonVal1) moonVal1.textContent = data?.moon?.phase ?? "—";
+  moonVal1.textContent = data?.moon?.phase ?? "—";
 }
 
-// Render: Tides
 function renderTides(data) {
-  if (!tidesList || !tidesEmpty) return;
-
   tidesList.innerHTML = "";
   tidesEmpty.classList.add("hidden");
 
   const station = data?.tideStation?.name;
-  if (tideStation) tideStation.textContent = station ? `Station: ${station}` : "Station: —";
+  tideStation.textContent = station ? `Station: ${station}` : "Station: —";
 
   const tides = Array.isArray(data?.tides) ? data.tides : [];
 
-  if (tides.length === 0) {
+  if (!tides.length) {
     tidesEmpty.classList.remove("hidden");
-    if (nextTide) nextTide.textContent = "—";
-    if (nextTideHint) nextTideHint.textContent = "—";
+    nextTide.textContent = "—";
+    nextTideHint.textContent = "—";
     return;
   }
 
-  // Show today's tides first (matching data.date)
-  const todayISO = data.date;
-  const todays = tides.filter((t) => (t?.time || "").startsWith(todayISO));
+  // Build rows for "today" only (match data.date)
+  const todayISO = data?.date;
+  const todays = todayISO
+    ? tides.filter((t) => (t?.time || "").startsWith(todayISO))
+    : [];
+
   const list = todays.length ? todays : tides.slice(0, 6);
 
   for (const t of list) {
-    const time = fmtTimeLocal(t.time);
-    const h = isNum(t.height) ? `${t.height.toFixed(2)} m` : "—";
-    const type = (t.type || "").toUpperCase() || "—";
+    const time = fmtTimeLocal(t?.time);
+    const h = isNum(t?.height) ? `${t.height.toFixed(2)} m` : "—";
+    const type = (t?.type || "").toUpperCase() || "—";
     tidesList.appendChild(row(time, h, type));
   }
 
   // Next tide based on now
   const now = Date.now();
   const next = tides
-    .map((t) => ({ ...t, ms: Date.parse(t.time) }))
+    .map((t) => ({ ...t, ms: Date.parse(t?.time) }))
     .filter((t) => Number.isFinite(t.ms) && t.ms > now)
     .sort((a, b) => a.ms - b.ms)[0];
 
   if (next) {
-    if (nextTide) nextTide.textContent = `${fmtTimeLocal(next.time)} • ${String(next.type || "").toUpperCase()}`;
-    if (nextTideHint) nextTideHint.textContent = isNum(next.height) ? `${next.height.toFixed(2)} m` : "";
+    nextTide.textContent = `${fmtTimeLocal(next.time)} • ${String(
+      next.type || ""
+    ).toUpperCase()}`;
+    nextTideHint.textContent = isNum(next.height) ? `${next.height.toFixed(2)} m` : "";
   } else {
-    if (nextTide) nextTide.textContent = "No upcoming tide found";
-    if (nextTideHint) nextTideHint.textContent = "";
+    nextTide.textContent = "No upcoming tide found";
+    nextTideHint.textContent = "";
   }
 }
 
@@ -250,19 +234,25 @@ function row(left, mid, tag) {
   return div;
 }
 
-// Formatting helpers
 function fmtTimeLocal(iso) {
   if (!iso) return "—";
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "—";
-  return new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" }).format(d);
+  return new Intl.DateTimeFormat(undefined, {
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(d);
 }
 
 function prettyDateFromISO(yyyy_mm_dd) {
-  const [y, m, d] = (yyyy_mm_dd || "").split("-").map(Number);
+  const [y, m, d] = String(yyyy_mm_dd || "").split("-").map(Number);
   if (!y || !m || !d) return "—";
   const dt = new Date(y, m - 1, d);
-  return new Intl.DateTimeFormat(undefined, { weekday: "long", day: "numeric", month: "short" }).format(dt);
+  return new Intl.DateTimeFormat(undefined, {
+    weekday: "long",
+    day: "numeric",
+    month: "short",
+  }).format(dt);
 }
 
 function uvCategory(v) {
@@ -290,6 +280,4 @@ function escapeHtml(s) {
     '"': "&quot;",
     "'": "&#039;",
   }[c]));
-}
-  return data;
 }
