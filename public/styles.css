@@ -20,10 +20,13 @@ body {
   font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
   color: #eaf0ff;
 
+  /* Fallback while the image loads */
+  background-color: #0b1220;
+
   background:
     linear-gradient(
-      rgba(7, 11, 20, 0.55),
-      rgba(7, 11, 20, 0.75)
+      rgba(7, 11, 20, 0.35),
+      rgba(7, 11, 20, 0.55)
     ),
     url("/bg-ocean-sun-moon.jpg");
 
