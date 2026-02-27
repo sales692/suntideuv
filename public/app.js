@@ -1,4 +1,5 @@
-console.log("APP JS VERSION 5 LOADED");
+console.log("APP JS VERSION 6 LOADED");
+
 const DEFAULT = { name: "Brisbane", lat: -27.4698, lon: 153.0251 };
 
 const el = (id) => document.getElementById(id);
@@ -35,7 +36,6 @@ el("btnBrisbane")?.addEventListener("click", () =>
 
 init();
 
-// ---------- UI helpers ----------
 function showLoading(on) {
   if (!loading) return;
   loading.classList.toggle("hidden", !on);
@@ -45,7 +45,6 @@ function setStatus(text) {
   if (pillStatus) pillStatus.textContent = text;
 }
 
-// ---------- App flow ----------
 async function init() {
   setStatus("Getting location…");
   await locateAndLoad({ quietFail: true });
@@ -72,41 +71,58 @@ async function locateAndLoad({ quietFail = false } = {}) {
 }
 
 async function loadFor(lat, lon, label) {
+  showLoading(true);
+  setStatus("Loading…");
+  if (pillPlace) pillPlace.textContent = `Location: ${label} (${lat}, ${lon})`;
+
   try {
-    showLoading(true);
-    setStatus("Loading…");
-    if (pillPlace) pillPlace.textContent = `Location: ${label} (${lat}, ${lon})`;
+    // 1) Load core data (NO tides)
+    const [today, tomorrow] = await Promise.all([
+      fetchSummaryWithTimeout(lat, lon, 0, { tides: false }),
+      fetchSummaryWithTimeout(lat, lon, 1, { tides: false }),
+    ]);
 
-    const results = await Promise.allSettled([
-  fetchSummaryCached(lat, lon, 0),
-  fetchSummaryCached(lat, lon, 1),
-]);
-
-const today = results[0].status === "fulfilled" ? results[0].value : null;
-const tomorrow = results[1].status === "fulfilled" ? results[1].value : null;
-
-if (today) renderToday(today);
-if (tomorrow) renderTomorrow(tomorrow);
+    renderToday(today);
+    renderTomorrow(tomorrow);
 
     setStatus("Updated");
+
+    // 2) Load tides AFTER the page has rendered (prevents “infinite loading” feel)
+    setTidesLoadingState(true);
+    const todayWithTides = await fetchSummaryWithTimeout(lat, lon, 0, { tides: true });
+
+    // If quota exceeded (or any tide error), show friendly message
+    if (todayWithTides?.tides_status !== "ok" || !Array.isArray(todayWithTides?.tides) || todayWithTides.tides.length === 0) {
+      renderTides(todayWithTides); // will show “no tide data returned…”
+    } else {
+      renderTides(todayWithTides);
+    }
+
   } catch (err) {
     console.error(err);
     setStatus("Error");
     alert("Could not load data. Please try again.");
   } finally {
+    setTidesLoadingState(false);
     showLoading(false);
   }
 }
 
 // ---------- Data fetching ----------
-async function fetchSummaryWithTimeout(lat, lon, day, msTimeout = 8000) {
+async function fetchSummaryWithTimeout(lat, lon, day, opts = {}) {
+  const wantTides = Boolean(opts.tides);
+  const msTimeout = opts.msTimeout ?? 8000;
+
   const controller = new AbortController();
   const t = setTimeout(() => controller.abort(), msTimeout);
 
   try {
-    const url = `/api/summary?lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(
-      lon
-    )}&day=${encodeURIComponent(day)}&v=1`;
+    const url =
+      `/api/summary?lat=${encodeURIComponent(lat)}` +
+      `&lon=${encodeURIComponent(lon)}` +
+      `&day=${encodeURIComponent(day)}` +
+      (wantTides ? `&tides=1` : ``) +
+      `&v=6`;
 
     const res = await fetch(url, {
       signal: controller.signal,
@@ -123,42 +139,6 @@ async function fetchSummaryWithTimeout(lat, lon, day, msTimeout = 8000) {
   } finally {
     clearTimeout(t);
   }
-}
-
-function cacheKey(lat, lon, day) {
-  // slightly rounded so cache hits even with tiny GPS changes
-  const rLat = Math.round(lat * 100) / 100;
-  const rLon = Math.round(lon * 100) / 100;
-  return `suntideuv:v2:${rLat}:${rLon}:d${day}`;
-}
-
-async function fetchSummaryCached(lat, lon, day) {
-  const key = cacheKey(lat, lon, day);
-  const now = Date.now();
-
-  // Cache for 10 minutes
-  try {
-    const cached = JSON.parse(localStorage.getItem(key) || "null");
-    if (cached && cached.exp > now && cached.data) return cached.data;
-  } catch {
-    // ignore cache parse errors
-  }
-
-  const data = await fetchSummaryWithTimeout(lat, lon, day, 8000);
-
-  try {
-    localStorage.setItem(
-      key,
-      JSON.stringify({
-        exp: now + 10 * 60 * 1000,
-        data,
-      })
-    );
-  } catch {
-    // ignore storage quota errors
-  }
-
-  return data;
 }
 
 // ---------- Render ----------
@@ -178,7 +158,8 @@ function renderToday(data) {
       ? `${data.moon.illuminationPct}% illuminated`
       : "—";
 
-  renderTides(data);
+  // reset tides to a safe empty state
+  renderTides({ tides: [], tideStation: null, tides_status: "skipped" });
 }
 
 function renderTomorrow(data) {
@@ -189,6 +170,15 @@ function renderTomorrow(data) {
   if (uvVal1) uvVal1.textContent = isNum(uv) ? uv.toFixed(1) : "—";
 
   if (moonVal1) moonVal1.textContent = data?.moon?.phase ?? "—";
+}
+
+function setTidesLoadingState(isLoading) {
+  // we reuse the same empty area as “loading”
+  if (!tidesEmpty) return;
+  if (isLoading) {
+    tidesEmpty.classList.remove("hidden");
+    tidesEmpty.textContent = "Loading tide data…";
+  }
 }
 
 function renderTides(data) {
@@ -203,13 +193,21 @@ function renderTides(data) {
   const tides = Array.isArray(data?.tides) ? data.tides : [];
 
   if (!tides.length) {
-  tidesEmpty.classList.remove("hidden");
-  nextTide.textContent = "—";
-  nextTideHint.textContent = "—";
-  return;
-}
+    tidesEmpty.classList.remove("hidden");
 
-  // Always show next 6 tides (best UX, avoids date/timezone edge cases)
+    // If quota exceeded, show why (without dumping huge debug)
+    const dbg = data?.tides_debug?.error || "";
+    if (String(dbg).includes("quota exceeded") || String(dbg).includes("402")) {
+      tidesEmpty.textContent = "Tide data temporarily unavailable (API quota reached).";
+    } else {
+      tidesEmpty.textContent = "No tide data returned for this location.";
+    }
+
+    nextTide.textContent = "—";
+    nextTideHint.textContent = "—";
+    return;
+  }
+
   tides.slice(0, 6).forEach((t) => {
     const row = document.createElement("div");
     row.className = "row";
@@ -221,7 +219,6 @@ function renderTides(data) {
     tidesList.appendChild(row);
   });
 
-  // Next tide = first future tide
   const now = Date.now();
   const next = tides
     .map((t) => ({ ...t, ms: Date.parse(t.time) }))
