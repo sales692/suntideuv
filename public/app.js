@@ -1,4 +1,4 @@
-console.log("APP VERSION 4 LOADED");
+console.log("APP JS VERSION 5 LOADED");
 const DEFAULT = { name: "Brisbane", lat: -27.4698, lon: 153.0251 };
 
 const el = (id) => document.getElementById(id);
