@@ -26,20 +26,27 @@ const tideStation = el("tideStation");
 const tidesList = el("tidesList");
 const tidesEmpty = el("tidesEmpty");
 
-el("btnLocate").addEventListener("click", () => locateAndLoad());
-el("btnBrisbane").addEventListener("click", () =>
+// Buttons
+el("btnLocate")?.addEventListener("click", () => locateAndLoad());
+el("btnBrisbane")?.addEventListener("click", () =>
   loadFor(DEFAULT.lat, DEFAULT.lon, DEFAULT.name)
 );
 
 init();
 
+// ---------- UI helpers ----------
 function showLoading(on) {
   if (!loading) return;
   loading.classList.toggle("hidden", !on);
 }
 
+function setStatus(text) {
+  if (pillStatus) pillStatus.textContent = text;
+}
+
+// ---------- App flow ----------
 async function init() {
-  pillStatus.textContent = "Getting location…";
+  setStatus("Getting location…");
   await locateAndLoad({ quietFail: true });
 }
 
@@ -59,7 +66,7 @@ async function locateAndLoad({ quietFail = false } = {}) {
       if (!quietFail) alert("Location blocked. Using Brisbane.");
       loadFor(DEFAULT.lat, DEFAULT.lon, DEFAULT.name);
     },
-    { timeout: 8000 }
+    { enableHighAccuracy: false, timeout: 8000, maximumAge: 5 * 60 * 1000 }
   );
 }
 
@@ -67,15 +74,14 @@ async function loadFor(lat, lon, label) {
   try {
     showLoading(true);
     setStatus("Loading…");
-
-    pillPlace.textContent = `Location: ${label} (${lat}, ${lon})`;
+    if (pillPlace) pillPlace.textContent = `Location: ${label} (${lat}, ${lon})`;
 
     const [today, tomorrow] = await Promise.all([
       fetchSummaryCached(lat, lon, 0),
-      fetchSummaryCached(lat, lon, 1)
+      fetchSummaryCached(lat, lon, 1),
     ]);
 
-    render(today);
+    renderToday(today);
     renderTomorrow(tomorrow);
 
     setStatus("Updated");
@@ -84,23 +90,29 @@ async function loadFor(lat, lon, label) {
     setStatus("Error");
     alert("Could not load data. Please try again.");
   } finally {
-    showLoading(false); // 👈 THIS is what was missing
+    showLoading(false);
   }
 }
 
-async function fetchSummaryWithTimeout(lat, lon, day, msTimeout) {
+// ---------- Data fetching ----------
+async function fetchSummaryWithTimeout(lat, lon, day, msTimeout = 8000) {
   const controller = new AbortController();
   const t = setTimeout(() => controller.abort(), msTimeout);
 
   try {
-    const res = await fetch(`/api/summary?lat=${lat}&lon=${lon}&day=${day}`, {
+    const url = `/api/summary?lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(
+      lon
+    )}&day=${encodeURIComponent(day)}&v=1`;
+
+    const res = await fetch(url, {
       signal: controller.signal,
       headers: { accept: "application/json" },
+      cache: "no-store",
     });
 
     if (!res.ok) {
       const text = await res.text().catch(() => "");
-      throw new Error(`API ${res.status}: ${text.slice(0, 120)}`);
+      throw new Error(`API ${res.status}: ${text.slice(0, 200)}`);
     }
 
     return await res.json();
@@ -109,36 +121,75 @@ async function fetchSummaryWithTimeout(lat, lon, day, msTimeout) {
   }
 }
 
-// Render
-function renderToday(data) {
-  pillDate.textContent = `Date: ${prettyDate(data.date)}`;
+function cacheKey(lat, lon, day) {
+  // slightly rounded so cache hits even with tiny GPS changes
+  const rLat = Math.round(lat * 100) / 100;
+  const rLon = Math.round(lon * 100) / 100;
+  return `suntideuv:v2:${rLat}:${rLon}:d${day}`;
+}
 
-  sunriseVal.textContent = time(data?.sun?.sunrise);
-  sunsetVal.textContent = time(data?.sun?.sunset);
+async function fetchSummaryCached(lat, lon, day) {
+  const key = cacheKey(lat, lon, day);
+  const now = Date.now();
+
+  // Cache for 10 minutes
+  try {
+    const cached = JSON.parse(localStorage.getItem(key) || "null");
+    if (cached && cached.exp > now && cached.data) return cached.data;
+  } catch {
+    // ignore cache parse errors
+  }
+
+  const data = await fetchSummaryWithTimeout(lat, lon, day, 8000);
+
+  try {
+    localStorage.setItem(
+      key,
+      JSON.stringify({
+        exp: now + 10 * 60 * 1000,
+        data,
+      })
+    );
+  } catch {
+    // ignore storage quota errors
+  }
+
+  return data;
+}
+
+// ---------- Render ----------
+function renderToday(data) {
+  if (pillDate) pillDate.textContent = `Date: ${prettyDate(data?.date)}`;
+
+  if (sunriseVal) sunriseVal.textContent = time(data?.sun?.sunrise);
+  if (sunsetVal) sunsetVal.textContent = time(data?.sun?.sunset);
 
   const uv = data?.uv?.max;
-  uvVal.textContent = isNum(uv) ? uv.toFixed(1) : "—";
-  uvHint.textContent = isNum(uv) ? uvLabel(uv) : "—";
+  if (uvVal) uvVal.textContent = isNum(uv) ? uv.toFixed(1) : "—";
+  if (uvHint) uvHint.textContent = isNum(uv) ? uvLabel(uv) : "—";
 
-  moonVal.textContent = data?.moon?.phase ?? "—";
-  moonHint.textContent = isNum(data?.moon?.illuminationPct)
-    ? `${data.moon.illuminationPct}% illuminated`
-    : "—";
+  if (moonVal) moonVal.textContent = data?.moon?.phase ?? "—";
+  if (moonHint)
+    moonHint.textContent = isNum(data?.moon?.illuminationPct)
+      ? `${data.moon.illuminationPct}% illuminated`
+      : "—";
 
   renderTides(data);
 }
 
 function renderTomorrow(data) {
-  sunriseVal1.textContent = time(data?.sun?.sunrise);
-  sunsetVal1.textContent = time(data?.sun?.sunset);
+  if (sunriseVal1) sunriseVal1.textContent = time(data?.sun?.sunrise);
+  if (sunsetVal1) sunsetVal1.textContent = time(data?.sun?.sunset);
 
   const uv = data?.uv?.max;
-  uvVal1.textContent = isNum(uv) ? uv.toFixed(1) : "—";
+  if (uvVal1) uvVal1.textContent = isNum(uv) ? uv.toFixed(1) : "—";
 
-  moonVal1.textContent = data?.moon?.phase ?? "—";
+  if (moonVal1) moonVal1.textContent = data?.moon?.phase ?? "—";
 }
 
 function renderTides(data) {
+  if (!tidesList || !tidesEmpty || !nextTide || !nextTideHint || !tideStation) return;
+
   tidesList.innerHTML = "";
   tidesEmpty.classList.add("hidden");
 
@@ -146,6 +197,7 @@ function renderTides(data) {
   tideStation.textContent = station ? `Station: ${station}` : "Station: —";
 
   const tides = Array.isArray(data?.tides) ? data.tides : [];
+
   if (!tides.length) {
     tidesEmpty.classList.remove("hidden");
     nextTide.textContent = "—";
@@ -153,18 +205,19 @@ function renderTides(data) {
     return;
   }
 
-  // Show first 6
+  // Always show next 6 tides (best UX, avoids date/timezone edge cases)
   tides.slice(0, 6).forEach((t) => {
     const row = document.createElement("div");
     row.className = "row";
     row.innerHTML = `
-      <div style="font-weight:800">${escapeHtml(time(t.time))}</div>
-      <div class="muted">${escapeHtml(isNum(t.height) ? `${t.height.toFixed(2)} m` : "—")}</div>
-      <div class="tag">${escapeHtml((t.type || "—").toUpperCase())}</div>
+      <div style="font-weight:800">${escapeHtml(time(t?.time))}</div>
+      <div class="muted">${escapeHtml(isNum(t?.height) ? `${t.height.toFixed(2)} m` : "—")}</div>
+      <div class="tag">${escapeHtml(String(t?.type || "—").toUpperCase())}</div>
     `;
     tidesList.appendChild(row);
   });
 
+  // Next tide = first future tide
   const now = Date.now();
   const next = tides
     .map((t) => ({ ...t, ms: Date.parse(t.time) }))
@@ -172,7 +225,7 @@ function renderTides(data) {
     .sort((a, b) => a.ms - b.ms)[0];
 
   if (next) {
-    nextTide.textContent = `${time(next.time)} • ${(next.type || "").toUpperCase()}`;
+    nextTide.textContent = `${time(next.time)} • ${String(next.type || "").toUpperCase()}`;
     nextTideHint.textContent = isNum(next.height) ? `${next.height.toFixed(2)} m` : "";
   } else {
     nextTide.textContent = "No upcoming tide found";
@@ -180,15 +233,12 @@ function renderTides(data) {
   }
 }
 
-// Helpers
+// ---------- Helpers ----------
 function time(iso) {
   if (!iso) return "—";
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "—";
-  return new Intl.DateTimeFormat(undefined, {
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(d);
+  return new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" }).format(d);
 }
 
 function prettyDate(yyyy_mm_dd) {
@@ -215,7 +265,8 @@ function isNum(x) {
 }
 
 function round(n, p) {
-  return Math.round(n * 10 ** p) / 10 ** p;
+  const pow = 10 ** p;
+  return Math.round(n * pow) / pow;
 }
 
 function escapeHtml(s) {
