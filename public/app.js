@@ -1,60 +1,50 @@
 const DEFAULT = { name: "Brisbane", lat: -27.4698, lon: 153.0251 };
 
 const el = (id) => document.getElementById(id);
-const must = (id) => {
-  const node = el(id);
-  if (!node) throw new Error(`Missing element #${id} in index.html`);
-  return node;
-};
 
-// Required elements (matches your index.html)
-const loading = must("loading");
+// UI
+const loading = el("loading");
+const pillStatus = el("pillStatus");
+const pillPlace = el("pillPlace");
+const pillDate = el("pillDate");
 
-const pillStatus = must("pillStatus");
-const pillPlace = must("pillPlace");
-const pillDate = must("pillDate");
+const sunriseVal = el("sunriseVal");
+const sunsetVal = el("sunsetVal");
+const uvVal = el("uvVal");
+const uvHint = el("uvHint");
+const moonVal = el("moonVal");
+const moonHint = el("moonHint");
 
-const sunriseVal = must("sunriseVal");
-const sunsetVal = must("sunsetVal");
-const uvVal = must("uvVal");
-const uvHint = must("uvHint");
-const moonVal = must("moonVal");
-const moonHint = must("moonHint");
+const sunriseVal1 = el("sunriseVal1");
+const sunsetVal1 = el("sunsetVal1");
+const uvVal1 = el("uvVal1");
+const moonVal1 = el("moonVal1");
 
-const nextTide = must("nextTide");
-const nextTideHint = must("nextTideHint");
-const tideStation = must("tideStation");
-const tidesList = must("tidesList");
-const tidesEmpty = must("tidesEmpty");
+const nextTide = el("nextTide");
+const nextTideHint = el("nextTideHint");
+const tideStation = el("tideStation");
+const tidesList = el("tidesList");
+const tidesEmpty = el("tidesEmpty");
 
-const sunriseVal1 = must("sunriseVal1");
-const sunsetVal1 = must("sunsetVal1");
-const uvVal1 = must("uvVal1");
-const moonVal1 = must("moonVal1");
+// Buttons
+el("btnLocate").addEventListener("click", () => locateAndLoad());
+el("btnBrisbane").addEventListener("click", () =>
+  loadFor(DEFAULT.lat, DEFAULT.lon, DEFAULT.name)
+);
 
-const btnLocate = must("btnLocate");
-const btnBrisbane = must("btnBrisbane");
+// Init
+init();
+
+async function init() {
+  pillStatus.textContent = "Getting location…";
+  await locateAndLoad({ quietFail: true });
+}
 
 function showLoading(on) {
   loading.classList.toggle("hidden", !on);
 }
 
-function setStatus(text) {
-  pillStatus.textContent = text;
-}
-
-btnLocate.addEventListener("click", () => locateAndLoad());
-btnBrisbane.addEventListener("click", () =>
-  loadFor(DEFAULT.lat, DEFAULT.lon, DEFAULT.name)
-);
-
-init();
-
-async function init() {
-  setStatus("Getting location…");
-  await locateAndLoad({ quietFail: true });
-}
-
+// Location
 async function locateAndLoad({ quietFail = false } = {}) {
   if (!navigator.geolocation) {
     if (!quietFail) alert("Geolocation not supported. Using Brisbane.");
@@ -71,93 +61,56 @@ async function locateAndLoad({ quietFail = false } = {}) {
       if (!quietFail) alert("Location blocked. Using Brisbane.");
       loadFor(DEFAULT.lat, DEFAULT.lon, DEFAULT.name);
     },
-    { enableHighAccuracy: false, timeout: 8000, maximumAge: 5 * 60 * 1000 }
+    { timeout: 8000 }
   );
 }
 
+// Main loader
 async function loadFor(lat, lon, label) {
   try {
     showLoading(true);
-    setStatus("Loading…");
+    pillStatus.textContent = "Loading…";
     pillPlace.textContent = `Location: ${label} (${lat}, ${lon})`;
 
     const [today, tomorrow] = await Promise.all([
-      fetchSummaryCached(lat, lon, 0),
-      fetchSummaryCached(lat, lon, 1),
+      fetchSummary(lat, lon, 0),
+      fetchSummary(lat, lon, 1),
     ]);
 
     renderToday(today);
     renderTomorrow(tomorrow);
 
-    setStatus("Updated");
+    pillStatus.textContent = "Updated";
   } catch (err) {
-    console.error("Load failed:", err);
-    setStatus("Error");
-    alert(`Could not load data.\n\n${String(err.message || err).slice(0, 200)}`);
+    console.error(err);
+    pillStatus.textContent = "Error";
+    alert("Could not load data.");
   } finally {
     showLoading(false);
   }
 }
 
+// API
 async function fetchSummary(lat, lon, day) {
-  const url =
-    `/api/summary?lat=${encodeURIComponent(lat)}` +
-    `&lon=${encodeURIComponent(lon)}` +
-    `&day=${encodeURIComponent(day)}` +
-    `&v=1`;
-
-  const res = await fetch(url, { headers: { accept: "application/json" } });
-
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(`API ${res.status}: ${text.slice(0, 200)}`);
-  }
+  const res = await fetch(
+    `/api/summary?lat=${lat}&lon=${lon}&day=${day}`
+  );
+  if (!res.ok) throw new Error("API error");
   return res.json();
 }
 
-function cacheKey(lat, lon, day) {
-  // round for better cache hits
-  const rLat = Math.round(lat * 100) / 100;
-  const rLon = Math.round(lon * 100) / 100;
-  return `suntideuv:v1:${rLat}:${rLon}:d${day}`;
-}
-
-async function fetchSummaryCached(lat, lon, day) {
-  const key = cacheKey(lat, lon, day);
-  const now = Date.now();
-
-  // Try cache (10 minutes)
-  try {
-    const cached = JSON.parse(localStorage.getItem(key) || "null");
-    if (cached && cached.exp > now && cached.data) return cached.data;
-  } catch {}
-
-  // Fetch fresh
-  const data = await fetchSummary(lat, lon, day);
-
-  // Save cache
-  try {
-    localStorage.setItem(
-      key,
-      JSON.stringify({ exp: now + 10 * 60 * 1000, data })
-    );
-  } catch {}
-
-  return data;
-}
-
+// Render
 function renderToday(data) {
-  pillDate.textContent = `Date: ${prettyDateFromISO(data?.date)}`;
+  pillDate.textContent = `Date: ${prettyDate(data.date)}`;
 
-  sunriseVal.textContent = fmtTimeLocal(data?.sun?.sunrise);
-  sunsetVal.textContent = fmtTimeLocal(data?.sun?.sunset);
+  sunriseVal.textContent = time(data.sun.sunrise);
+  sunsetVal.textContent = time(data.sun.sunset);
 
-  const uv = data?.uv?.max;
-  uvVal.textContent = isNum(uv) ? uv.toFixed(1) : "—";
-  uvHint.textContent = isNum(uv) ? uvCategory(uv) : "—";
+  uvVal.textContent = data.uv?.max?.toFixed(1) ?? "—";
+  uvHint.textContent = uvLabel(data.uv?.max);
 
-  moonVal.textContent = data?.moon?.phase ?? "—";
-  moonHint.textContent = isNum(data?.moon?.illuminationPct)
+  moonVal.textContent = data.moon?.phase ?? "—";
+  moonHint.textContent = data.moon?.illuminationPct
     ? `${data.moon.illuminationPct}% illuminated`
     : "—";
 
@@ -165,119 +118,57 @@ function renderToday(data) {
 }
 
 function renderTomorrow(data) {
-  sunriseVal1.textContent = fmtTimeLocal(data?.sun?.sunrise);
-  sunsetVal1.textContent = fmtTimeLocal(data?.sun?.sunset);
-
-  const uv = data?.uv?.max;
-  uvVal1.textContent = isNum(uv) ? uv.toFixed(1) : "—";
-
-  moonVal1.textContent = data?.moon?.phase ?? "—";
+  sunriseVal1.textContent = time(data.sun.sunrise);
+  sunsetVal1.textContent = time(data.sun.sunset);
+  uvVal1.textContent = data.uv?.max?.toFixed(1) ?? "—";
+  moonVal1.textContent = data.moon?.phase ?? "—";
 }
 
 function renderTides(data) {
   tidesList.innerHTML = "";
   tidesEmpty.classList.add("hidden");
 
-  const station = data?.tideStation?.name;
-  tideStation.textContent = station ? `Station: ${station}` : "Station: —";
+  tideStation.textContent = data.tideStation
+    ? `Station: ${data.tideStation.name}`
+    : "Station: —";
 
-  const tides = Array.isArray(data?.tides) ? data.tides : [];
-
-  if (!tides.length) {
+  if (!data.tides?.length) {
     tidesEmpty.classList.remove("hidden");
-    nextTide.textContent = "—";
-    nextTideHint.textContent = "—";
     return;
   }
 
-  // Build rows for "today" only (match data.date)
-  const todayISO = data?.date;
-  const todays = todayISO
-    ? tides.filter((t) => (t?.time || "").startsWith(todayISO))
-    : [];
+  data.tides.slice(0, 6).forEach((t) => {
+    const row = document.createElement("div");
+    row.className = "row";
+    row.innerHTML = `
+      <div><strong>${time(t.time)}</strong></div>
+      <div class="muted">${t.height.toFixed(2)} m</div>
+      <div class="tag">${t.type.toUpperCase()}</div>
+    `;
+    tidesList.appendChild(row);
+  });
 
-  const list = todays.length ? todays : tides.slice(0, 6);
-
-  for (const t of list) {
-    const time = fmtTimeLocal(t?.time);
-    const h = isNum(t?.height) ? `${t.height.toFixed(2)} m` : "—";
-    const type = (t?.type || "").toUpperCase() || "—";
-    tidesList.appendChild(row(time, h, type));
-  }
-
-  // Next tide based on now
-  const now = Date.now();
-  const next = tides
-    .map((t) => ({ ...t, ms: Date.parse(t?.time) }))
-    .filter((t) => Number.isFinite(t.ms) && t.ms > now)
-    .sort((a, b) => a.ms - b.ms)[0];
-
+  const next = data.tides.find(t => Date.parse(t.time) > Date.now());
   if (next) {
-    nextTide.textContent = `${fmtTimeLocal(next.time)} • ${String(
-      next.type || ""
-    ).toUpperCase()}`;
-    nextTideHint.textContent = isNum(next.height) ? `${next.height.toFixed(2)} m` : "";
-  } else {
-    nextTide.textContent = "No upcoming tide found";
-    nextTideHint.textContent = "";
+    nextTide.textContent = `${time(next.time)} • ${next.type.toUpperCase()}`;
+    nextTideHint.textContent = `${next.height.toFixed(2)} m`;
   }
 }
 
-function row(left, mid, tag) {
-  const div = document.createElement("div");
-  div.className = "row";
-  div.innerHTML = `
-    <div style="font-weight:800">${escapeHtml(left)}</div>
-    <div class="muted">${escapeHtml(mid)}</div>
-    <div class="tag">${escapeHtml(tag)}</div>
-  `;
-  return div;
+// Helpers
+function time(iso) {
+  return new Date(iso).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 }
-
-function fmtTimeLocal(iso) {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "—";
-  return new Intl.DateTimeFormat(undefined, {
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(d);
+function prettyDate(d) {
+  return new Date(d).toLocaleDateString([], { weekday: "long", day: "numeric", month: "short" });
 }
-
-function prettyDateFromISO(yyyy_mm_dd) {
-  const [y, m, d] = String(yyyy_mm_dd || "").split("-").map(Number);
-  if (!y || !m || !d) return "—";
-  const dt = new Date(y, m - 1, d);
-  return new Intl.DateTimeFormat(undefined, {
-    weekday: "long",
-    day: "numeric",
-    month: "short",
-  }).format(dt);
-}
-
-function uvCategory(v) {
+function uvLabel(v) {
   if (v < 3) return "Low";
   if (v < 6) return "Moderate";
   if (v < 8) return "High";
   if (v < 11) return "Very High";
   return "Extreme";
 }
-
-function isNum(x) {
-  return typeof x === "number" && Number.isFinite(x);
-}
-
-function round(x, dp) {
-  const p = 10 ** dp;
-  return Math.round(x * p) / p;
-}
-
-function escapeHtml(s) {
-  return String(s).replace(/[&<>"']/g, (c) => ({
-    "&": "&amp;",
-    "<": "&lt;",
-    ">": "&gt;",
-    '"': "&quot;",
-    "'": "&#039;",
-  }[c]));
+function round(n, p) {
+  return Math.round(n * 10 ** p) / 10 ** p;
 }
