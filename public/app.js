@@ -76,13 +76,16 @@ async function loadFor(lat, lon, label) {
     setStatus("Loading…");
     if (pillPlace) pillPlace.textContent = `Location: ${label} (${lat}, ${lon})`;
 
-    const [today, tomorrow] = await Promise.all([
-      fetchSummaryCached(lat, lon, 0),
-      fetchSummaryCached(lat, lon, 1),
-    ]);
+    const results = await Promise.allSettled([
+  fetchSummaryCached(lat, lon, 0),
+  fetchSummaryCached(lat, lon, 1),
+]);
 
-    renderToday(today);
-    renderTomorrow(tomorrow);
+const today = results[0].status === "fulfilled" ? results[0].value : null;
+const tomorrow = results[1].status === "fulfilled" ? results[1].value : null;
+
+if (today) renderToday(today);
+if (tomorrow) renderTomorrow(tomorrow);
 
     setStatus("Updated");
   } catch (err) {
