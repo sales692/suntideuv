@@ -64,26 +64,27 @@ async function locateAndLoad({ quietFail = false } = {}) {
 }
 
 async function loadFor(lat, lon, label) {
-  showLoading(true);
-  pillStatus.textContent = "Loading…";
-  pillPlace.textContent = `Location: ${label} (${lat}, ${lon})`;
-
   try {
+    showLoading(true);
+    setStatus("Loading…");
+
+    pillPlace.textContent = `Location: ${label} (${lat}, ${lon})`;
+
     const [today, tomorrow] = await Promise.all([
-      fetchSummaryWithTimeout(lat, lon, 0, 12000),
-      fetchSummaryWithTimeout(lat, lon, 1, 12000),
+      fetchSummaryCached(lat, lon, 0),
+      fetchSummaryCached(lat, lon, 1)
     ]);
 
-    renderToday(today);
+    render(today);
     renderTomorrow(tomorrow);
 
-    pillStatus.textContent = "Updated";
+    setStatus("Updated");
   } catch (err) {
-    console.error("Load error:", err);
-    pillStatus.textContent = "Error loading data";
+    console.error(err);
+    setStatus("Error");
     alert("Could not load data. Please try again.");
   } finally {
-    showLoading(false);
+    showLoading(false); // 👈 THIS is what was missing
   }
 }
 
