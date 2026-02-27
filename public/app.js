@@ -202,11 +202,11 @@ function renderTides(data) {
   const tides = Array.isArray(data?.tides) ? data.tides : [];
 
   if (!tides.length) {
-    tidesEmpty.classList.remove("hidden");
-    nextTide.textContent = "—";
-    nextTideHint.textContent = "—";
-    return;
-  }
+  tidesEmpty.classList.remove("hidden");
+  nextTide.textContent = "—";
+  nextTideHint.textContent = "—";
+  return;
+}
 
   // Always show next 6 tides (best UX, avoids date/timezone edge cases)
   tides.slice(0, 6).forEach((t) => {
