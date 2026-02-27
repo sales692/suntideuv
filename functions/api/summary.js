@@ -1,18 +1,15 @@
-export async function onRequestGet({ request, env, waitUntil }) {
+export async function onRequestGet({ request, env }) {
   const { searchParams } = new URL(request.url);
 
   const lat = Number(searchParams.get("lat"));
   const lon = Number(searchParams.get("lon"));
   const day = Number(searchParams.get("day") || 0);
 
-  // IMPORTANT: tides are now opt-in
-  const wantTides = searchParams.get("tides") === "1";
-
   if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
     return json({ ok: false, error: "lat and lon are required" }, 400);
   }
 
-  // Date string (UTC) for "today + day"
+  // Date (UTC): today + day
   const d = new Date();
   d.setUTCDate(d.getUTCDate() + day);
   const dateStr = d.toISOString().slice(0, 10);
@@ -24,148 +21,169 @@ export async function onRequestGet({ request, env, waitUntil }) {
     sun: null,
     uv: { max: null },
     moon: calcMoon(dateStr),
-
-    // tides fields always exist so UI doesn’t break
     tides: [],
     tideStation: null,
-    tides_status: wantTides ? "requested" : "skipped",
     tides_debug: { enabled: Boolean(env?.STORMGLASS_API_KEY) }
   };
 
-  // ---- SUN (cache 12h) ----
+  // -------- SUN (cache 12 hours) --------
   try {
     const sunUrl =
       `https://api.sunrise-sunset.org/json?lat=${lat}&lng=${lon}` +
       `&date=${encodeURIComponent(dateStr)}` +
       `&formatted=0`;
 
-    const sunJson = await cachedFetchJson(
-      sunUrl,
-      { cacheTtlSeconds: 12 * 60 * 60 },
-      waitUntil
-    );
-
+    const sunJson = await cachedFetchJson(sunUrl, 12 * 60 * 60);
     result.sun = sunJson?.results ?? null;
   } catch {
     result.sun = null;
   }
 
-  // ---- UV (cache 1h) ----
+  // -------- UV (cache 1 hour) --------
   try {
     const uvUrl =
       `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}` +
       `&daily=uv_index_max&timezone=auto`;
 
-    const uvJson = await cachedFetchJson(
-      uvUrl,
-      { cacheTtlSeconds: 60 * 60 },
-      waitUntil
-    );
-
+    const uvJson = await cachedFetchJson(uvUrl, 60 * 60);
     result.uv.max = uvJson?.daily?.uv_index_max?.[day] ?? null;
   } catch {
     result.uv.max = null;
   }
 
-  // ---- TIDES (Stormglass) — only if tides=1 AND day=0 ----
-  if (wantTides && day === 0 && env?.STORMGLASS_API_KEY) {
-    const tideCacheHours = Number(env?.TIDE_CACHE_HOURS || 12); // increase to reduce quota burn
-    try {
-      const startISO = `${dateStr}T00:00:00+00:00`;
-
-      // today + tomorrow range helps "next tide"
-      const endDate = new Date(`${dateStr}T00:00:00Z`);
-      endDate.setUTCDate(endDate.getUTCDate() + 2);
-      const endStr = endDate.toISOString().slice(0, 10);
-      const endISO = `${endStr}T00:00:00+00:00`;
-
-      const tideUrl =
-        `https://api.stormglass.io/v2/tide/extremes/point` +
-        `?lat=${lat}&lng=${lon}` +
-        `&start=${encodeURIComponent(startISO)}` +
-        `&end=${encodeURIComponent(endISO)}` +
-        `&datum=MSL`;
-
-      // Cache key SHOULD be rounded so nearby GPS doesn’t cause new Stormglass calls
-      const rLat = Math.round(lat * 100) / 100;
-      const rLon = Math.round(lon * 100) / 100;
-      const cacheKeyUrl = `${tideUrl}&_rlat=${rLat}&_rlon=${rLon}`;
-
-      const tideText = await cachedFetchText(
-        cacheKeyUrl,
-        {
-          fetchUrl: tideUrl, // actual upstream URL
-          cacheTtlSeconds: tideCacheHours * 60 * 60,
-          headers: { Authorization: env.STORMGLASS_API_KEY }
-        },
-        waitUntil
-      );
-
-      const tideJson = JSON.parse(tideText);
-
-      result.tides = Array.isArray(tideJson?.data) ? tideJson.data : [];
-      result.tideStation = tideJson?.meta?.station ?? null;
-      result.tides_status = "ok";
-      result.tides_debug.cachedHours = tideCacheHours;
-
-    } catch (e) {
-      // If quota exceeded or any error, keep page working
-      result.tides = [];
-      result.tideStation = null;
-      result.tides_status = "error";
-      result.tides_debug.error = String(e);
-    }
-  } else if (wantTides && day !== 0) {
-    result.tides_status = "skipped_day_not_supported";
+  // -------- TIDES (Stormglass) --------
+  // Only fetch tides for TODAY to reduce quota burn.
+  if (day === 0) {
+    const tides = await getTidesWithEdgeCache({ lat, lon, dateStr, env });
+    result.tides = tides.data;
+    result.tideStation = tides.station;
+    result.tides_debug = { ...result.tides_debug, ...tides.debug };
   }
 
+  // Short cache on the whole summary response (so refreshes don’t hammer you)
   return json(result, 200, {
-    // cache the summary response briefly
-    "cache-control": "public, max-age=0, s-maxage=300, stale-while-revalidate=600"
+    "cache-control": "public, max-age=0, s-maxage=120, stale-while-revalidate=600"
   });
 }
 
-/* ----------------- Cloudflare edge cache helpers ----------------- */
+/* ---------------- Tides with edge cache + quota fallback ---------------- */
 
-async function cachedFetchText(cacheKeyUrl, opts = {}, waitUntil) {
-  const cacheTtlSeconds = Number(opts.cacheTtlSeconds || 600);
-  const headers = opts.headers || {};
-  const fetchUrl = opts.fetchUrl || cacheKeyUrl;
-
-  const cacheKey = new Request(cacheKeyUrl, { method: "GET" });
+async function getTidesWithEdgeCache({ lat, lon, dateStr, env }) {
+  const debug = {};
   const cache = caches.default;
 
+  // Bucket locations a bit so tiny GPS shifts don’t create new cache keys
+  const rLat = Math.round(lat * 100) / 100;
+  const rLon = Math.round(lon * 100) / 100;
+
+  const ttlHours = Number(env?.TIDE_CACHE_HOURS || 24); // set in Cloudflare → Variables
+  const ttlSeconds = ttlHours * 60 * 60;
+
+  // Cache key for tides: location bucket + date
+  const cacheKey = new Request(
+    `https://edge-cache.local/tides?lat=${rLat}&lon=${rLon}&date=${dateStr}`,
+    { method: "GET" }
+  );
+
+  // 1) If we have cached tides, use them immediately
   const cached = await cache.match(cacheKey);
-  if (cached) return cached.text();
+  if (cached) {
+    debug.cache = `HIT (${ttlHours}h bucket)`;
+    const payload = await cached.json();
+    return {
+      data: Array.isArray(payload?.data) ? payload.data : [],
+      station: payload?.station ?? null,
+      debug
+    };
+  }
 
-  const res = await fetch(fetchUrl, { headers });
-  const text = await res.text();
+  debug.cache = "MISS";
 
-  if (res.ok) {
-    const toCache = new Response(text, {
-      headers: {
-        "content-type": res.headers.get("content-type") || "application/json",
-        "cache-control": `public, max-age=0, s-maxage=${cacheTtlSeconds}`
-      }
+  // If no key, we can’t fetch — return empty
+  if (!env?.STORMGLASS_API_KEY) {
+    debug.note = "No STORMGLASS_API_KEY set";
+    return { data: [], station: null, debug };
+  }
+
+  // Build Stormglass request (today + tomorrow range)
+  const startISO = `${dateStr}T00:00:00+00:00`;
+  const endDate = new Date(`${dateStr}T00:00:00Z`);
+  endDate.setUTCDate(endDate.getUTCDate() + 2);
+  const endStr = endDate.toISOString().slice(0, 10);
+  const endISO = `${endStr}T00:00:00+00:00`;
+
+  const tideUrl =
+    `https://api.stormglass.io/v2/tide/extremes/point` +
+    `?lat=${lat}&lng=${lon}` +
+    `&start=${encodeURIComponent(startISO)}` +
+    `&end=${encodeURIComponent(endISO)}` +
+    `&datum=MSL`;
+
+  debug.url = tideUrl;
+
+  try {
+    const res = await fetch(tideUrl, {
+      headers: { Authorization: env.STORMGLASS_API_KEY }
     });
 
-    if (typeof waitUntil === "function") waitUntil(cache.put(cacheKey, toCache));
-    else cache.put(cacheKey, toCache).catch(() => {});
-  }
+    debug.status = res.status;
 
-  if (!res.ok) {
-    throw new Error(`Upstream ${res.status}: ${text.slice(0, 200)}`);
-  }
+    const text = await res.text();
+    debug.bodyPreview = text.slice(0, 180);
 
-  return text;
+    // If quota/rate-limited, return empty (no cache exists yet)
+    if (!res.ok) {
+      throw new Error(`Upstream ${res.status}: ${text.slice(0, 160)}`);
+    }
+
+    const tideJson = JSON.parse(text);
+    const data = Array.isArray(tideJson?.data) ? tideJson.data : [];
+    const station = tideJson?.meta?.station ?? null;
+
+    // 2) Store successful tides in edge cache
+    const toCache = new Response(JSON.stringify({ data, station }), {
+      headers: {
+        "content-type": "application/json; charset=utf-8",
+        "cache-control": `public, max-age=0, s-maxage=${ttlSeconds}`
+      }
+    });
+    // cache.put is async-safe without waitUntil; Pages will still perform it.
+    cache.put(cacheKey, toCache);
+
+    debug.cache = `STORE (${ttlHours}h)`;
+    return { data, station, debug };
+  } catch (e) {
+    debug.error = String(e);
+    return { data: [], station: null, debug };
+  }
 }
 
-async function cachedFetchJson(url, opts = {}, waitUntil) {
-  const text = await cachedFetchText(url, { ...opts, fetchUrl: url }, waitUntil);
+/* ---------------- Generic edge cache helpers ---------------- */
+
+async function cachedFetchJson(url, ttlSeconds = 600) {
+  const cache = caches.default;
+  const key = new Request(url, { method: "GET" });
+
+  const cached = await cache.match(key);
+  if (cached) return cached.json();
+
+  const res = await fetch(url);
+  const text = await res.text();
+
+  if (!res.ok) throw new Error(`Upstream ${res.status}: ${text.slice(0, 160)}`);
+
+  const toCache = new Response(text, {
+    headers: {
+      "content-type": res.headers.get("content-type") || "application/json",
+      "cache-control": `public, max-age=0, s-maxage=${ttlSeconds}`
+    }
+  });
+
+  cache.put(key, toCache);
   return JSON.parse(text);
 }
 
-/* ----------------- utilities ----------------- */
+/* ---------------- Utilities ---------------- */
 
 function json(data, status = 200, headers = {}) {
   return new Response(JSON.stringify(data, null, 2), {
