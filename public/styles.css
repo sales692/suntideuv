@@ -222,7 +222,19 @@ h1{
   background: rgba(0,0,0,.10);
 }
 
-.hidden{ display:none; }
+.hidden {
+  display: none !important;
+}
+
+.loading {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+}
 
 /* Footer */
 .foot{
