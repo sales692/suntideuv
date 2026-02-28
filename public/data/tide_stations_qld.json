@@ -1,0 +1,14 @@
+[
+  {
+    "name": "Brisbane Bar",
+    "lat": -27.38,
+    "lon": 153.18,
+    "resource_id_highlow": "PUT_RESOURCE_ID_HERE"
+  },
+  {
+    "name": "Gold Coast Seaway",
+    "lat": -27.94,
+    "lon": 153.43,
+    "resource_id_highlow": "PUT_RESOURCE_ID_HERE"
+  }
+]
