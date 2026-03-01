@@ -10,7 +10,7 @@
     "name": "Southport",
     "lat": -27.96,
     "lon": 153.43,
-    "resource_id_interval_2026": "PUT_SOUTHPORT_2026_RESOURCE_ID_HERE",
+    "resource_id_interval_2026": "fe33fb39-bf49-42f4-8886-ce305fcf9dbb",
     "tz_offset": "+10:00"
   }
 ]
