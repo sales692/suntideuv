@@ -1,10 +1,3 @@
-// /functions/api/summary.js
-// Free tides via MSQ Open Data (CKAN DataStore), with strong edge caching.
-//
-// References:
-// CKAN datastore_search uses: /api/3/action/datastore_search?resource_id={RESOURCE_ID}
-// CKAN docs show DataStore API patterns. (docs.ckan.org)  :contentReference[oaicite:2]{index=2}
-
 export async function onRequestGet(context) {
   const { request } = context;
   const { searchParams } = new URL(request.url);
@@ -31,29 +24,19 @@ export async function onRequestGet(context) {
     moon: calcMoon(dateStr),
     tides: [],
     tideStation: null,
-    tides_debug: {
-      source: "msq_ckan",
-      stationCount: null,
-      chosenStation: null,
-      errors: []
-    }
+    tides_debug: { provider: "qld_ckan", enabled: true }
   };
 
   // ---- SUN (cached 12 hours) ----
   try {
     const sunUrl =
       `https://api.sunrise-sunset.org/json?lat=${lat}&lng=${lon}` +
-      `&date=${encodeURIComponent(dateStr)}` +
-      `&formatted=0`;
+      `&date=${encodeURIComponent(dateStr)}&formatted=0`;
 
-    const sunJson = await cachedFetchJson(context, sunUrl, {
-      cacheTtlSeconds: 12 * 60 * 60
-    });
-
+    const sunJson = await cachedFetchJson(context, sunUrl, { cacheTtlSeconds: 12 * 60 * 60 });
     result.sun = sunJson?.results ?? null;
-  } catch (e) {
+  } catch {
     result.sun = null;
-    result.tides_debug.errors.push(`SUN: ${String(e)}`);
   }
 
   // ---- UV (cached 1 hour) ----
@@ -62,100 +45,134 @@ export async function onRequestGet(context) {
       `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}` +
       `&daily=uv_index_max&timezone=auto`;
 
-    const uvJson = await cachedFetchJson(context, uvUrl, {
-      cacheTtlSeconds: 60 * 60
-    });
-
+    const uvJson = await cachedFetchJson(context, uvUrl, { cacheTtlSeconds: 60 * 60 });
     result.uv.max = uvJson?.daily?.uv_index_max?.[day] ?? null;
-  } catch (e) {
+  } catch {
     result.uv.max = null;
-    result.tides_debug.errors.push(`UV: ${String(e)}`);
   }
 
-  // ---- TIDES (MSQ / CKAN) ----
-  // Strategy:
-  // - Load stations list from repo (cached 24h at edge)
-  // - Pick nearest station to requested lat/lon
-  // - Query CKAN datastore_search for the date window
-  // - Normalize to [{ time, height, type }]
-  //
-  // Cache: tides for a station+date cached at edge for 6 hours (configurable)
-  const tideCacheHours = 6;
+  // ---- TIDES (Queensland CKAN) ----
   try {
-    const stations = await loadStations(context);
-    result.tides_debug.stationCount = stations.length;
+    // Load your station list from your own site
+    const origin = new URL(request.url).origin;
+    const stationsUrl = `${origin}/data/tide_stations_qld.json`;
 
-    const station = pickNearestStation(stations, lat, lon);
-    if (!station) {
-      throw new Error("No tide stations available (stations file empty?)");
+    const stations = await cachedFetchJson(context, stationsUrl, { cacheTtlSeconds: 24 * 60 * 60 });
+    if (!Array.isArray(stations) || !stations.length) throw new Error("No stations found in tide_stations_qld.json");
+
+    const station = findNearestStation(lat, lon, stations);
+    result.tideStation = { name: station.name, lat: station.lat, lon: station.lon };
+
+    const year = Number(dateStr.slice(0, 4));
+    const tz = station.tz_offset || "+10:00";
+
+    // Pick a resource_id for the year; you can expand these keys as you add more years
+    const rid =
+      station[`resource_id_interval_${year}`] ||
+      station.resource_id_interval_2026 || // fallback if you only populate 2026 initially
+      null;
+
+    if (!rid) {
+      result.tides_debug.error = `No resource id found for ${station.name} (year ${year})`;
+    } else {
+      // Pull enough data to determine next high/low reliably:
+      // For daily view, grab today + tomorrow (2 days of 10-min data ≈ 576 rows)
+      const dates = day === 0 ? [dateStr, addDaysUTC(dateStr, 1)] : [dateStr];
+      const readings = await fetchIntervalReadingsCKAN(context, rid, dates);
+
+      // Convert readings -> time series, compute turning points
+      const series = readings
+        .map(r => {
+          const iso = toIsoWithOffset(r.Date, r.Time, tz);
+          const value = Number(r.Reading);
+          return { iso, ms: Date.parse(iso), value };
+        })
+        .filter(p => Number.isFinite(p.ms) && Number.isFinite(p.value))
+        .sort((a, b) => a.ms - b.ms);
+
+      const extremes = detectHighLow(series);
+
+      // Convert to your UI shape (limit to 12, UI shows 6 anyway)
+      result.tides = extremes.slice(0, 12).map(e => ({
+        time: e.iso,
+        height: e.value,
+        type: e.type
+      }));
     }
-
-    result.tideStation = { name: station.name };
-    result.tides_debug.chosenStation = station.name;
-
-    // We fetch a 2-day window to support "next tide" properly
-    const startISO = `${dateStr}T00:00:00Z`;
-    const endDate = new Date(`${dateStr}T00:00:00Z`);
-    endDate.setUTCDate(endDate.getUTCDate() + 2);
-    const endStr = endDate.toISOString().slice(0, 10);
-    const endISO = `${endStr}T00:00:00Z`;
-
-    const tides = await fetchCkanHighLowForWindow(context, {
-      resourceId: station.resource_id_highlow,
-      startISO,
-      endISO,
-      cacheTtlSeconds: tideCacheHours * 60 * 60
-    });
-
-    result.tides = tides;
   } catch (e) {
-    // Tide errors should NOT break the page
+    // Tide failures should not break the whole page
     result.tides = [];
-    result.tideStation = result.tideStation ?? null;
-    result.tides_debug.errors.push(`TIDES: ${String(e)}`);
+    result.tideStation = null;
+    result.tides_debug.error = String(e);
   }
 
-  // Cache the summary response briefly so refreshes don't hammer anything
   return json(result, 200, {
     "cache-control": "public, max-age=0, s-maxage=300, stale-while-revalidate=600"
   });
 }
 
-/* ----------------- Stations ----------------- */
+/* ----------------- CKAN fetch ----------------- */
 
-async function loadStations(context) {
-  // Stations file is deployed as a static asset.
-  // IMPORTANT: This path assumes you keep it in /data/tide_stations_qld.json
-  // and it’s included in the Pages assets.
-  const url = new URL(context.request.url);
-  const stationsUrl = `${url.origin}/data/tide_stations_qld.json`;
+// Uses datastore_search_sql so we can filter by Date in one request.
+// CKAN supports SQL endpoint /api/3/action/datastore_search_sql (shown in CKAN API modal). :contentReference[oaicite:3]{index=3}
+async function fetchIntervalReadingsCKAN(context, resourceId, dates) {
+  const where = dates.map(d => `Date='${d}'`).join(" OR ");
+  const sql =
+    `SELECT Date, Time, Reading ` +
+    `FROM "${resourceId}" ` +
+    `WHERE ${where} ` +
+    `ORDER BY Date, Time ` +
+    `LIMIT 2000`;
 
-  // Cache at edge 24h
-  const data = await cachedFetchJson(context, stationsUrl, {
-    cacheTtlSeconds: 24 * 60 * 60
-  });
+  const url = `https://www.data.qld.gov.au/api/3/action/datastore_search_sql?sql=${encodeURIComponent(sql)}`;
 
-  if (!Array.isArray(data)) return [];
-  return data
-    .filter((s) => s && typeof s.name === "string")
-    .filter((s) => Number.isFinite(s.lat) && Number.isFinite(s.lon))
-    .filter((s) => typeof s.resource_id_highlow === "string" && s.resource_id_highlow.length > 10);
+  const data = await cachedFetchJson(context, url, { cacheTtlSeconds: 6 * 60 * 60 });
+  const records = data?.result?.records;
+  return Array.isArray(records) ? records : [];
 }
 
-function pickNearestStation(stations, lat, lon) {
-  if (!stations.length) return null;
+/* ----------------- Tide math ----------------- */
 
-  let best = stations[0];
-  let bestD = haversineKm(lat, lon, best.lat, best.lon);
+function detectHighLow(series) {
+  // turning points where slope changes sign
+  const out = [];
+  if (series.length < 3) return out;
 
-  for (let i = 1; i < stations.length; i++) {
-    const s = stations[i];
+  for (let i = 1; i < series.length - 1; i++) {
+    const a = series[i - 1], b = series[i], c = series[i + 1];
+    const up1 = b.value > a.value;
+    const up2 = c.value > b.value;
+
+    if (up1 && !up2) out.push({ ...b, type: "HIGH" }); // rising then falling
+    if (!up1 && up2) out.push({ ...b, type: "LOW" });  // falling then rising
+  }
+
+  // De-dupe: if multiple points flat at peak/trough, keep the first
+  const deduped = [];
+  for (const p of out) {
+    const last = deduped[deduped.length - 1];
+    if (last && last.type === p.type && Math.abs(last.value - p.value) < 0.001) continue;
+    deduped.push(p);
+  }
+
+  // Only future-ish points preferred (but keep all if time parsing odd)
+  const now = Date.now();
+  const future = deduped.filter(p => p.ms > now);
+  return future.length ? future : deduped;
+}
+
+function findNearestStation(lat, lon, stations) {
+  let best = null;
+  let bestD = Infinity;
+  for (const s of stations) {
+    if (!Number.isFinite(s.lat) || !Number.isFinite(s.lon)) continue;
     const d = haversineKm(lat, lon, s.lat, s.lon);
     if (d < bestD) {
-      best = s;
       bestD = d;
+      best = s;
     }
   }
+  if (!best) throw new Error("No valid station lat/lon");
   return best;
 }
 
@@ -170,123 +187,39 @@ function haversineKm(lat1, lon1, lat2, lon2) {
   return 2 * R * Math.asin(Math.sqrt(a));
 }
 
-/* ----------------- CKAN tides fetch ----------------- */
-
-async function fetchCkanHighLowForWindow(context, { resourceId, startISO, endISO, cacheTtlSeconds }) {
-  // CKAN DataStore API:
-  // POST https://www.data.qld.gov.au/api/3/action/datastore_search
-  // Body: { "resource_id": "...", "limit": 100, "filters": {...} } etc.
-  //
-  // Data shapes vary by dataset. So we:
-  // - request a generous limit
-  // - then normalize rows that have a timestamp + height + type
-
-  const endpoint = "https://www.data.qld.gov.au/api/3/action/datastore_search";
-  const cacheKey = `ckan:${resourceId}:${startISO}:${endISO}`;
-
-  // Try cache first
-  const cached = await cacheGetJson(context, cacheKey);
-  if (cached) return cached;
-
-  const body = {
-    resource_id: resourceId,
-    limit: 500
-    // NOTE: many MSQ resources support filtering, but field names vary.
-    // We’ll fetch and filter client-side in the Worker to avoid guessing field names here.
-  };
-
-  const res = await fetch(endpoint, {
-    method: "POST",
-    headers: {
-      "content-type": "application/json"
-    },
-    body: JSON.stringify(body)
-  });
-
-  const text = await res.text();
-  if (!res.ok) {
-    throw new Error(`CKAN ${res.status}: ${text.slice(0, 200)}`);
-  }
-
-  let payload;
-  try {
-    payload = JSON.parse(text);
-  } catch {
-    throw new Error(`CKAN non-JSON response: ${text.slice(0, 200)}`);
-  }
-
-  const rows = payload?.result?.records;
-  if (!Array.isArray(rows)) {
-    throw new Error("CKAN response did not include records[]");
-  }
-
-  // Normalize:
-  // We accept common field names:
-  // - time: "time" | "date_time" | "datetime" | "timestamp" | "DateTime" etc
-  // - height: "height" | "Height" | "prediction" | "value" etc
-  // - type: "type" | "event" | "Tide" etc (HIGH/LOW)
-  const startMs = Date.parse(startISO);
-  const endMs = Date.parse(endISO);
-
-  const out = [];
-  for (const r of rows) {
-    const tRaw =
-      r.time ?? r.date_time ?? r.datetime ?? r.timestamp ?? r.DateTime ?? r.DATE_TIME ?? null;
-    const ms = Date.parse(String(tRaw || ""));
-    if (!Number.isFinite(ms)) continue;
-    if (Number.isFinite(startMs) && ms < startMs) continue;
-    if (Number.isFinite(endMs) && ms >= endMs) continue;
-
-    const hRaw =
-      r.height ?? r.Height ?? r.prediction ?? r.value ?? r.Value ?? r.HEIGHT ?? null;
-    const height = Number(hRaw);
-    const typeRaw =
-      r.type ?? r.event ?? r.Event ?? r.tide ?? r.Tide ?? r.TIDE ?? null;
-
-    // Attempt to infer type if not explicitly provided
-    const type = normalizeTideType(typeRaw);
-
-    out.push({
-      time: new Date(ms).toISOString(),
-      height: Number.isFinite(height) ? height : null,
-      type
-    });
-  }
-
-  // Sort ascending
-  out.sort((a, b) => Date.parse(a.time) - Date.parse(b.time));
-
-  // Cache result
-  await cachePutJson(context, cacheKey, out, cacheTtlSeconds);
-
-  return out;
+function toIsoWithOffset(dateStr, timeStr, tzOffset) {
+  // CKAN provides Date + Time as text fields. :contentReference[oaicite:4]{index=4}
+  // timeStr often "HH:MM" or "HH:MM:SS"
+  const t = (timeStr || "").trim();
+  const hhmmss = t.length === 5 ? `${t}:00` : t;
+  return `${dateStr}T${hhmmss}${tzOffset}`;
 }
 
-function normalizeTideType(x) {
-  const s = String(x || "").toUpperCase();
-  if (s.includes("HIGH")) return "HIGH";
-  if (s.includes("LOW")) return "LOW";
-  // Some datasets may store H/L, or "HW"/"LW"
-  if (s === "H" || s === "HW") return "HIGH";
-  if (s === "L" || s === "LW") return "LOW";
-  return "—";
+function addDaysUTC(yyyy_mm_dd, days) {
+  const [y, m, d] = yyyy_mm_dd.split("-").map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  dt.setUTCDate(dt.getUTCDate() + days);
+  return dt.toISOString().slice(0, 10);
 }
 
-/* ----------------- Edge cache helpers ----------------- */
+/* ----------------- Cloudflare cache helpers ----------------- */
 
-async function cachedFetchJson(context, url, { cacheTtlSeconds = 600 } = {}) {
-  const text = await cachedFetchText(context, url, { cacheTtlSeconds });
+async function cachedFetchJson(context, url, opts = {}) {
+  const text = await cachedFetchText(context, url, opts);
   return JSON.parse(text);
 }
 
-async function cachedFetchText(context, url, { cacheTtlSeconds = 600 } = {}) {
+async function cachedFetchText(context, url, opts = {}) {
+  const cacheTtlSeconds = Number(opts.cacheTtlSeconds || 600);
+  const headers = opts.headers || {};
+
+  const cacheKey = new Request(url, { method: "GET" });
   const cache = caches.default;
-  const req = new Request(url, { method: "GET" });
 
-  const hit = await cache.match(req);
-  if (hit) return await hit.text();
+  const cached = await cache.match(cacheKey);
+  if (cached) return cached.text();
 
-  const res = await fetch(req);
+  const res = await fetch(url, { headers });
   const text = await res.text();
 
   if (res.ok) {
@@ -296,43 +229,17 @@ async function cachedFetchText(context, url, { cacheTtlSeconds = 600 } = {}) {
         "cache-control": `public, max-age=0, s-maxage=${cacheTtlSeconds}`
       }
     });
-    context.waitUntil(cache.put(req, toCache));
+    context.waitUntil(cache.put(cacheKey, toCache));
   }
 
-  if (!res.ok) throw new Error(`Upstream ${res.status}: ${text.slice(0, 200)}`);
+  if (!res.ok) {
+    throw new Error(`Upstream ${res.status}: ${text.slice(0, 200)}`);
+  }
+
   return text;
 }
 
-// Small JSON cache bucket keyed by a synthetic string
-async function cacheGetJson(context, key) {
-  const cache = caches.default;
-  const url = new URL(context.request.url);
-  const req = new Request(`${url.origin}/__cache__/${encodeURIComponent(key)}`, { method: "GET" });
-  const hit = await cache.match(req);
-  if (!hit) return null;
-  try {
-    return await hit.json();
-  } catch {
-    return null;
-  }
-}
-
-async function cachePutJson(context, key, data, ttlSeconds) {
-  const cache = caches.default;
-  const url = new URL(context.request.url);
-  const req = new Request(`${url.origin}/__cache__/${encodeURIComponent(key)}`, { method: "GET" });
-
-  const res = new Response(JSON.stringify(data), {
-    headers: {
-      "content-type": "application/json; charset=utf-8",
-      "cache-control": `public, max-age=0, s-maxage=${ttlSeconds}`
-    }
-  });
-
-  context.waitUntil(cache.put(req, res));
-}
-
-/* ----------------- utilities ----------------- */
+/* ----------------- Utilities ----------------- */
 
 function json(data, status = 200, headers = {}) {
   return new Response(JSON.stringify(data, null, 2), {
