@@ -3,12 +3,14 @@
     "name": "Brisbane Bar",
     "lat": -27.38,
     "lon": 153.18,
-    "resource_id_highlow": "PUT_RESOURCE_ID_HERE"
+    "resource_id_interval_2026": "11f33b0e-953f-46f4-84a9-1aa0a779a5e7",
+    "tz_offset": "+10:00"
   },
   {
-    "name": "Gold Coast Seaway",
-    "lat": -27.94,
+    "name": "Southport",
+    "lat": -27.96,
     "lon": 153.43,
-    "resource_id_highlow": "PUT_RESOURCE_ID_HERE"
+    "resource_id_interval_2026": "PUT_SOUTHPORT_2026_RESOURCE_ID_HERE",
+    "tz_offset": "+10:00"
   }
 ]
