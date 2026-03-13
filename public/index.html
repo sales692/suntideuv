@@ -3,16 +3,36 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Sun • Tide • UV • Moon</title>
+
+  <title>Sun, Tide, UV & Moon Times | Brisbane & Queensland</title>
+  <meta
+    name="description"
+    content="Daily sunrise, sunset, tide times, UV index and moon phase for Brisbane and Queensland. Fast, simple and free."
+  />
+  <meta
+    name="keywords"
+    content="Brisbane tide times, Queensland tides, sunrise Brisbane, UV index Brisbane, moon phase Queensland"
+  />
+  <meta name="theme-color" content="#0b1220" />
+
+  <meta property="og:title" content="Sun, Tide, UV & Moon Times | Brisbane & Queensland" />
+  <meta
+    property="og:description"
+    content="Daily sunrise, sunset, tide times, UV index and moon phase for Brisbane and Queensland."
+  />
+  <meta property="og:type" content="website" />
+
   <link rel="stylesheet" href="/styles.css" />
 </head>
 <body>
-
   <div class="wrap">
     <header class="top">
       <div>
         <h1>Sun • Tide • UV • Moon</h1>
-        <p class="sub">Quick daily conditions for your location (or Brisbane as a fallback).</p>
+        <p class="sub">
+          Daily sunrise, sunset, tide times, UV index and moon phase for your location
+          or Brisbane as a fallback.
+        </p>
       </div>
 
       <div class="actions">
@@ -27,11 +47,10 @@
       <span class="pill" id="pillDate">Date: —</span>
     </section>
 
-    <!-- loading overlay -->
-   <div id="loading" class="loading hidden">
-  <div class="spinner"></div>
-  <div class="spinner-text">Loading latest data...</div>
-</div>
+    <div id="loading" class="loading hidden" aria-live="polite" aria-busy="true">
+      <div class="spinner"></div>
+      <div class="spinner-text">Loading latest data...</div>
+    </div>
 
     <main class="grid">
       <section class="card">
@@ -45,10 +64,16 @@
           <div class="v" id="sunsetVal">—</div>
 
           <div class="k">UV Max</div>
-          <div class="v"><span id="uvVal">—</span> <span class="muted" id="uvHint">—</span></div>
+          <div class="v">
+            <span id="uvVal">—</span>
+            <span class="muted" id="uvHint">—</span>
+          </div>
 
           <div class="k">Moon</div>
-          <div class="v"><span id="moonVal">—</span> <span class="muted" id="moonHint">—</span></div>
+          <div class="v">
+            <span id="moonVal">—</span>
+            <span class="muted" id="moonHint">—</span>
+          </div>
         </div>
       </section>
 
@@ -71,7 +96,12 @@
       </section>
 
       <section class="card card-wide">
-        <h2>Tides</h2>
+        <div class="card-head">
+          <div>
+            <h2>Tides</h2>
+            <p class="card-sub">Based on the nearest Queensland tide station.</p>
+          </div>
+        </div>
 
         <div class="tide-top">
           <div class="tide-next">
@@ -89,6 +119,13 @@
 
         <div id="tidesList" class="tides"></div>
       </section>
+
+      <section class="card ad-card">
+        <div class="ad-label">Advertisement</div>
+        <div class="ad-slot" id="adSlotPrimary">
+          Ad space reserved
+        </div>
+      </section>
     </main>
 
     <footer class="foot muted">
@@ -96,6 +133,6 @@
     </footer>
   </div>
 
- <script src="/app.js?v=6"></script>
+  <script src="/app.js?v=7"></script>
 </body>
 </html>
