@@ -10,7 +10,6 @@ export async function onRequestGet(context) {
     return json({ ok: false, error: "lat and lon are required" }, 400);
   }
 
-  // Build date string (UTC) for "today + day"
   const d = new Date();
   d.setUTCDate(d.getUTCDate() + day);
   const dateStr = d.toISOString().slice(0, 10);
@@ -24,7 +23,13 @@ export async function onRequestGet(context) {
     moon: calcMoon(dateStr),
     tides: [],
     tideStation: null,
-    tides_debug: { provider: "qld_ckan", enabled: true }
+    tides_debug: {
+      provider: "qld_ckan",
+      enabled: true,
+      queryDates: [],
+      chosenStation: null,
+      rowCount: 0
+    }
   };
 
   // ---- SUN (cached 12 hours) ----
@@ -33,7 +38,10 @@ export async function onRequestGet(context) {
       `https://api.sunrise-sunset.org/json?lat=${lat}&lng=${lon}` +
       `&date=${encodeURIComponent(dateStr)}&formatted=0`;
 
-    const sunJson = await cachedFetchJson(context, sunUrl, { cacheTtlSeconds: 12 * 60 * 60 });
+    const sunJson = await cachedFetchJson(context, sunUrl, {
+      cacheTtlSeconds: 12 * 60 * 60
+    });
+
     result.sun = sunJson?.results ?? null;
   } catch {
     result.sun = null;
@@ -45,7 +53,10 @@ export async function onRequestGet(context) {
       `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}` +
       `&daily=uv_index_max&timezone=auto`;
 
-    const uvJson = await cachedFetchJson(context, uvUrl, { cacheTtlSeconds: 60 * 60 });
+    const uvJson = await cachedFetchJson(context, uvUrl, {
+      cacheTtlSeconds: 60 * 60
+    });
+
     result.uv.max = uvJson?.daily?.uv_index_max?.[day] ?? null;
   } catch {
     result.uv.max = null;
@@ -53,54 +64,67 @@ export async function onRequestGet(context) {
 
   // ---- TIDES (Queensland CKAN) ----
   try {
-    // Load your station list from your own site
     const origin = new URL(request.url).origin;
     const stationsUrl = `${origin}/data/tide_stations_qld.json`;
 
-    const stations = await cachedFetchJson(context, stationsUrl, { cacheTtlSeconds: 24 * 60 * 60 });
-    if (!Array.isArray(stations) || !stations.length) throw new Error("No stations found in tide_stations_qld.json");
+    const stations = await cachedFetchJson(context, stationsUrl, {
+      cacheTtlSeconds: 24 * 60 * 60
+    });
 
-    const station = findNearestStation(lat, lon, stations);
-    result.tideStation = { name: station.name, lat: station.lat, lon: station.lon };
+    if (!Array.isArray(stations) || !stations.length) {
+      throw new Error("No stations found in tide_stations_qld.json");
+    }
+
+    const station = findNearestStation(lat, lon, stations) || findBrisbaneFallback(stations);
+
+    if (!station) {
+      throw new Error("No valid station found");
+    }
+
+    result.tideStation = {
+      name: station.name,
+      lat: station.lat,
+      lon: station.lon
+    };
+    result.tides_debug.chosenStation = station.name;
 
     const year = Number(dateStr.slice(0, 4));
     const tz = station.tz_offset || "+10:00";
 
-    // Pick a resource_id for the year; you can expand these keys as you add more years
     const rid =
       station[`resource_id_interval_${year}`] ||
-      station.resource_id_interval_2026 || // fallback if you only populate 2026 initially
+      station.resource_id_interval_2026 ||
       null;
 
     if (!rid) {
       result.tides_debug.error = `No resource id found for ${station.name} (year ${year})`;
     } else {
-      // Pull enough data to determine next high/low reliably:
-      // For daily view, grab today + tomorrow (2 days of 10-min data ≈ 576 rows)
-      const dates = day === 0 ? [dateStr, addDaysUTC(dateStr, 1)] : [dateStr];
-      const readings = await fetchIntervalReadingsCKAN(context, rid, dates);
+      const rawDates = day === 0 ? [dateStr, addDaysUTC(dateStr, 1)] : [dateStr];
+      const ckanDates = rawDates.map(toCkanDate);
 
-      // Convert readings -> time series, compute turning points
+      result.tides_debug.queryDates = ckanDates;
+
+      const readings = await fetchIntervalReadingsCKAN(context, rid, ckanDates);
+      result.tides_debug.rowCount = readings.length;
+
       const series = readings
-        .map(r => {
-          const iso = toIsoWithOffset(r.Date, r.Time, tz);
+        .map((r) => {
+          const iso = toIsoWithOffset(fromCkanDate(r.Date), r.Time, tz);
           const value = Number(r.Reading);
           return { iso, ms: Date.parse(iso), value };
         })
-        .filter(p => Number.isFinite(p.ms) && Number.isFinite(p.value))
+        .filter((p) => Number.isFinite(p.ms) && Number.isFinite(p.value))
         .sort((a, b) => a.ms - b.ms);
 
       const extremes = detectHighLow(series);
 
-      // Convert to your UI shape (limit to 12, UI shows 6 anyway)
-      result.tides = extremes.slice(0, 12).map(e => ({
+      result.tides = extremes.slice(0, 12).map((e) => ({
         time: e.iso,
         height: e.value,
         type: e.type
       }));
     }
   } catch (e) {
-    // Tide failures should not break the whole page
     result.tides = [];
     result.tideStation = null;
     result.tides_debug.error = String(e);
@@ -113,10 +137,8 @@ export async function onRequestGet(context) {
 
 /* ----------------- CKAN fetch ----------------- */
 
-// Uses datastore_search_sql so we can filter by Date in one request.
-// CKAN supports SQL endpoint /api/3/action/datastore_search_sql (shown in CKAN API modal). :contentReference[oaicite:3]{index=3}
-async function fetchIntervalReadingsCKAN(context, resourceId, dates) {
-  const where = dates.map(d => `Date='${d}'`).join(" OR ");
+async function fetchIntervalReadingsCKAN(context, resourceId, ckanDates) {
+  const where = ckanDates.map((d) => `Date='${d}'`).join(" OR ");
   const sql =
     `SELECT Date, Time, Reading ` +
     `FROM "${resourceId}" ` +
@@ -124,9 +146,13 @@ async function fetchIntervalReadingsCKAN(context, resourceId, dates) {
     `ORDER BY Date, Time ` +
     `LIMIT 2000`;
 
-  const url = `https://www.data.qld.gov.au/api/3/action/datastore_search_sql?sql=${encodeURIComponent(sql)}`;
+  const url =
+    `https://www.data.qld.gov.au/api/3/action/datastore_search_sql?sql=${encodeURIComponent(sql)}`;
 
-  const data = await cachedFetchJson(context, url, { cacheTtlSeconds: 6 * 60 * 60 });
+  const data = await cachedFetchJson(context, url, {
+    cacheTtlSeconds: 6 * 60 * 60
+  });
+
   const records = data?.result?.records;
   return Array.isArray(records) ? records : [];
 }
@@ -134,62 +160,71 @@ async function fetchIntervalReadingsCKAN(context, resourceId, dates) {
 /* ----------------- Tide math ----------------- */
 
 function detectHighLow(series) {
-  // turning points where slope changes sign
   const out = [];
   if (series.length < 3) return out;
 
   for (let i = 1; i < series.length - 1; i++) {
-    const a = series[i - 1], b = series[i], c = series[i + 1];
+    const a = series[i - 1];
+    const b = series[i];
+    const c = series[i + 1];
+
     const up1 = b.value > a.value;
     const up2 = c.value > b.value;
 
-    if (up1 && !up2) out.push({ ...b, type: "HIGH" }); // rising then falling
-    if (!up1 && up2) out.push({ ...b, type: "LOW" });  // falling then rising
+    if (up1 && !up2) out.push({ ...b, type: "HIGH" });
+    if (!up1 && up2) out.push({ ...b, type: "LOW" });
   }
 
-  // De-dupe: if multiple points flat at peak/trough, keep the first
   const deduped = [];
   for (const p of out) {
     const last = deduped[deduped.length - 1];
-    if (last && last.type === p.type && Math.abs(last.value - p.value) < 0.001) continue;
+    if (last && last.type === p.type && Math.abs(last.value - p.value) < 0.001) {
+      continue;
+    }
     deduped.push(p);
   }
 
-  // Only future-ish points preferred (but keep all if time parsing odd)
   const now = Date.now();
-  const future = deduped.filter(p => p.ms > now);
+  const future = deduped.filter((p) => p.ms > now);
   return future.length ? future : deduped;
 }
 
 function findNearestStation(lat, lon, stations) {
   let best = null;
   let bestD = Infinity;
+
   for (const s of stations) {
     if (!Number.isFinite(s.lat) || !Number.isFinite(s.lon)) continue;
+
     const d = haversineKm(lat, lon, s.lat, s.lon);
     if (d < bestD) {
       bestD = d;
       best = s;
     }
   }
-  if (!best) throw new Error("No valid station lat/lon");
+
   return best;
+}
+
+function findBrisbaneFallback(stations) {
+  return stations.find((s) => String(s.name || "").toLowerCase().includes("brisbane")) || null;
 }
 
 function haversineKm(lat1, lon1, lat2, lon2) {
   const R = 6371;
   const toRad = (x) => (x * Math.PI) / 180;
+
   const dLat = toRad(lat2 - lat1);
   const dLon = toRad(lon2 - lon1);
+
   const a =
     Math.sin(dLat / 2) ** 2 +
     Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+
   return 2 * R * Math.asin(Math.sqrt(a));
 }
 
 function toIsoWithOffset(dateStr, timeStr, tzOffset) {
-  // CKAN provides Date + Time as text fields. :contentReference[oaicite:4]{index=4}
-  // timeStr often "HH:MM" or "HH:MM:SS"
   const t = (timeStr || "").trim();
   const hhmmss = t.length === 5 ? `${t}:00` : t;
   return `${dateStr}T${hhmmss}${tzOffset}`;
@@ -200,6 +235,18 @@ function addDaysUTC(yyyy_mm_dd, days) {
   const dt = new Date(Date.UTC(y, m - 1, d));
   dt.setUTCDate(dt.getUTCDate() + days);
   return dt.toISOString().slice(0, 10);
+}
+
+/* ----------------- Date conversions ----------------- */
+
+function toCkanDate(yyyy_mm_dd) {
+  const [y, m, d] = yyyy_mm_dd.split("-");
+  return `${d}/${m}/${y}`;
+}
+
+function fromCkanDate(dd_mm_yyyy) {
+  const [d, m, y] = String(dd_mm_yyyy).split("/");
+  return `${y}-${m}-${d}`;
 }
 
 /* ----------------- Cloudflare cache helpers ----------------- */
@@ -244,7 +291,10 @@ async function cachedFetchText(context, url, opts = {}) {
 function json(data, status = 200, headers = {}) {
   return new Response(JSON.stringify(data, null, 2), {
     status,
-    headers: { "content-type": "application/json; charset=utf-8", ...headers }
+    headers: {
+      "content-type": "application/json; charset=utf-8",
+      ...headers
+    }
   });
 }
 
@@ -257,7 +307,9 @@ function calcMoon(dateStr) {
   if (age < 0) age += synodic;
   const frac = age / synodic;
 
-  const illuminationPct = Math.round(((1 - Math.cos(2 * Math.PI * frac)) / 2) * 100);
+  const illuminationPct = Math.round(
+    ((1 - Math.cos(2 * Math.PI * frac)) / 2) * 100
+  );
   const phase = phaseName(frac);
 
   return { phase, illuminationPct };
