@@ -138,12 +138,13 @@ export async function onRequestGet(context) {
 /* ----------------- CKAN fetch ----------------- */
 
 async function fetchIntervalReadingsCKAN(context, resourceId, ckanDates) {
-  const where = ckanDates.map((d) => `Date='${d}'`).join(" OR ");
+  const dateList = ckanDates.map((d) => `'${d}'`).join(", ");
+
   const sql =
-    `SELECT Date, Time, Reading ` +
+    `SELECT "Date", "Time", "Reading" ` +
     `FROM "${resourceId}" ` +
-    `WHERE ${where} ` +
-    `ORDER BY Date, Time ` +
+    `WHERE "Date" IN (${dateList}) ` +
+    `ORDER BY to_date("Date", 'DD/MM/YYYY'), "Time" ` +
     `LIMIT 2000`;
 
   const url =
@@ -156,7 +157,6 @@ async function fetchIntervalReadingsCKAN(context, resourceId, ckanDates) {
   const records = data?.result?.records;
   return Array.isArray(records) ? records : [];
 }
-
 /* ----------------- Tide math ----------------- */
 
 function detectHighLow(series) {
