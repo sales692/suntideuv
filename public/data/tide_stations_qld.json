@@ -17,7 +17,7 @@
     "name": "Scarborough",
     "lat": -27.20,
     "lon": 153.11,
-    "resource_id_interval_2026": "3a8d5d13-fade-4f34-a442-97e1f2ebecf8",
+    "resource_id_interval_2026": "a0c66f9d-25ca-462e-a18a-aecf2ea3413d",
     "tz_offset": "+10:00"
   },
   {
@@ -31,28 +31,28 @@
     "name": "Pinkenba (Gateway Bridge Brisbane River)",
     "lat": -27.42,
     "lon": 153.11,
-    "resource_id_interval_2026": "f0b2f9b2-23a5-4085-affc-7bcb2d7b5004",
+    "resource_id_interval_2026": "f0b3afb9-859b-4f39-b79e-b1114ccc0f90",
     "tz_offset": "+10:00"
   },
   {
     "name": "Mooloolaba",
     "lat": -26.68,
     "lon": 153.12,
-    "resource_id_interval_2026": "350ed1fc-31f2-435e-baa0-fb528f152526",
+    "resource_id_interval_2026": "b30edf1c-31f2-435e-baa0-fb528f152526",
     "tz_offset": "+10:00"
   },
   {
     "name": "Waddy Point K'gari",
     "lat": -24.85,
     "lon": 153.36,
-    "resource_id_interval_2026": "2f28705e-14c0-4f9a-9f65-ad3b70b3f11a",
+    "resource_id_interval_2026": "2f28705e-14c0-4f9a-9f65-ad3b70b3f81b",
     "tz_offset": "+10:00"
   },
   {
     "name": "Burnett Heads",
     "lat": -24.76,
     "lon": 152.40,
-    "resource_id_interval_2026": "06b3aa5f-8dcb-45ca-b20e-f02226",
+    "resource_id_interval_2026": "5a7f0b4b-dd64-460d-ba41-a2f9cb35dc2f",
     "tz_offset": "+10:00"
   },
   {
@@ -66,77 +66,77 @@
     "name": "Fisherman's Landing",
     "lat": -23.84,
     "lon": 151.25,
-    "resource_id_interval_2026": "535dd21e-b790-41f9-825f-1f97010de7f6",
+    "resource_id_interval_2026": "fecb55e2-2ca7-4712-9355-edfce762d534",
     "tz_offset": "+10:00"
   },
   {
     "name": "South Trees",
     "lat": -23.90,
     "lon": 151.27,
-    "resource_id_interval_2026": "e2fc0ef7-477a-4f2e-9f24-ad87d2d5fcad",
+    "resource_id_interval_2026": "87ec7377-443c-0ca8-f875-d04435e3a",
     "tz_offset": "+10:00"
   },
   {
     "name": "Shute Harbour",
     "lat": -20.29,
     "lon": 148.79,
-    "resource_id_interval_2026": "7f793f0a-fd66-4234-8b3a-7f36edaabae7",
+    "resource_id_interval_2026": "0cc62f54-1634-4cc1-bb0a-eb0797155632",
     "tz_offset": "+10:00"
   },
   {
     "name": "Cape Ferguson",
     "lat": -19.28,
     "lon": 147.06,
-    "resource_id_interval_2026": "2040e3f7-2450-4d63-a29e-ab7375773457",
+    "resource_id_interval_2026": "1d0fdadf-0907-47d5-92fe-adc6557c2607",
     "tz_offset": "+10:00"
   },
   {
     "name": "Lucinda",
     "lat": -18.52,
     "lon": 146.33,
-    "resource_id_interval_2026": "0d40473a-f3ea-273d-5bcb-2a3a5f0f0f3",
+    "resource_id_interval_2026": "4cdf7b71-7b3a-423a-974c-63ea8070574c",
     "tz_offset": "+10:00"
   },
   {
     "name": "Cardwell",
     "lat": -18.26,
     "lon": 146.02,
-    "resource_id_interval_2026": "ec2f0cef-477a-4f2e-9f24-4d762d25fcad",
+    "resource_id_interval_2026": "307b41ac-f304-43b9-b767-36d73a16fe7d",
     "tz_offset": "+10:00"
   },
   {
     "name": "Cooktown",
     "lat": -15.47,
     "lon": 145.25,
-    "resource_id_interval_2026": "6d20331e-06d5-05f2-a94d-1dafdb0e2e23",
+    "resource_id_interval_2026": "02f9c611-78c6-43d3-a537-0dd5d0e51119",
     "tz_offset": "+10:00"
   },
   {
     "name": "Mossman",
     "lat": -16.46,
     "lon": 145.37,
-    "resource_id_interval_2026": "d177e49c-2d16-4b67-9379-af15d4ec4e29",
+    "resource_id_interval_2026": "6177e49c-2d16-4cb7-9379-af15d4ec4e23",
     "tz_offset": "+10:00"
   },
   {
     "name": "Lizard Island",
     "lat": -14.67,
     "lon": 145.45,
-    "resource_id_interval_2026": "eb7a3f1a-c74d-44f5-9e1a-4b342e0e4e4d",
+    "resource_id_interval_2026": "eb7a53fa-c74d-44f5-9e1b-4b342e0e54a6",
     "tz_offset": "+10:00"
   },
   {
     "name": "Cape Flattery",
     "lat": -14.98,
     "lon": 145.34,
-    "resource_id_interval_2026": "0d60417a-3fea-273d-5bcb-2a3a5f0f0f3",
+    "resource_id_interval_2026": "62b170f3-3612-4fd7-8ae3-30b084345310",
     "tz_offset": "+10:00"
   },
   {
     "name": "Portland Roads",
     "lat": -12.59,
     "lon": 143.40,
-    "resource_id_interval_2026": "3b1c5c42-870c-4f2e-b9b3-0f32d0d5f12e",
+    "resource_id_interval_2026": "d336deb5-f907-4535-bf05-f1735188efa5",
     "tz_offset": "+10:00"
   }
 ]
