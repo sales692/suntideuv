@@ -1,32 +1,162 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Gold Coast Tide Times | Sun Tide UV Moon</title>
-  <meta name="description" content="Gold Coast tide times, sunrise, sunset, UV index and moon phase for Queensland.">
-  <link rel="stylesheet" href="/styles.css">
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+
+  <title>Gold Coast Tide Times Today | Sunrise, UV & Moon Phase</title>
+  <meta
+    name="description"
+    content="Gold Coast tide times today with sunrise, sunset, UV index and moon phase. Live daily conditions for the Gold Coast, Queensland."
+  />
+  <meta
+    name="keywords"
+    content="Gold Coast tide times, Southport tide times, Gold Coast Seaway tides, Gold Coast sunrise, Gold Coast UV index"
+  />
+  <meta name="theme-color" content="#0b1220" />
+
+  <meta property="og:title" content="Gold Coast Tide Times Today | Sunrise, UV & Moon Phase" />
+  <meta
+    property="og:description"
+    content="Gold Coast tide times today with sunrise, sunset, UV index and moon phase."
+  />
+  <meta property="og:type" content="website" />
+
+  <link rel="stylesheet" href="/styles.css" />
 </head>
 <body>
   <div class="wrap">
     <header class="top">
       <div>
         <h1>Gold Coast Tide Times</h1>
-        <p class="sub">Gold Coast tide information, sunrise, sunset, UV index and moon phase.</p>
+        <p class="sub">
+          Daily tide times, sunrise, sunset, UV index and moon phase for the Gold Coast.
+        </p>
       </div>
+
       <div class="actions">
-        <a href="/" class="btn">Back to Home</a>
+        <a href="/" class="btn">Home</a>
+        <a href="/brisbane-tide-times.html" class="btn btn-ghost">Brisbane</a>
       </div>
     </header>
 
-    <section class="card">
-      <h2>Gold Coast Tide Information</h2>
-      <p>This page is being prepared and will soon include full Gold Coast tide information and local conditions.</p>
+    <section class="pills">
+      <span class="pill" id="pillStatus">Loading…</span>
+      <span class="pill" id="pillPlace">Location: Gold Coast</span>
+      <span class="pill" id="pillDate">Date: —</span>
     </section>
+
+    <div id="loading" class="loading hidden" aria-live="polite" aria-busy="true">
+      <div class="spinner"></div>
+      <div class="spinner-text">Loading latest data...</div>
+    </div>
+
+    <main class="grid">
+      <section class="card">
+        <h2>Today</h2>
+
+        <div class="kv">
+          <div class="k">Sunrise</div>
+          <div class="v" id="sunriseVal">—</div>
+
+          <div class="k">Sunset</div>
+          <div class="v" id="sunsetVal">—</div>
+
+          <div class="k">UV Max</div>
+          <div class="v">
+            <span id="uvVal">—</span>
+            <span class="muted" id="uvHint">—</span>
+          </div>
+
+          <div class="k">Moon</div>
+          <div class="v">
+            <span id="moonVal">—</span>
+            <span class="muted" id="moonHint">—</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>Tomorrow</h2>
+
+        <div class="kv">
+          <div class="k">Sunrise</div>
+          <div class="v" id="sunriseVal1">—</div>
+
+          <div class="k">Sunset</div>
+          <div class="v" id="sunsetVal1">—</div>
+
+          <div class="k">UV Max</div>
+          <div class="v" id="uvVal1">—</div>
+
+          <div class="k">Moon</div>
+          <div class="v" id="moonVal1">—</div>
+        </div>
+      </section>
+
+      <section class="card card-wide">
+        <div class="card-head">
+          <div>
+            <h2>Gold Coast Tides</h2>
+            <p class="card-sub">Nearest station data for the Gold Coast area.</p>
+          </div>
+        </div>
+
+        <div class="tide-top">
+          <div class="tide-next">
+            <div class="k">Next tide</div>
+            <div class="v" id="nextTide">—</div>
+            <div class="muted" id="nextTideHint">—</div>
+          </div>
+
+          <div class="tide-station muted" id="tideStation">Station: —</div>
+        </div>
+
+        <div id="tidesEmpty" class="empty hidden">
+          No tide data returned for this location.
+        </div>
+
+        <div id="tidesList" class="tides"></div>
+      </section>
+
+      <section class="card ad-card">
+        <div class="ad-label">Advertisement</div>
+        <div class="ad-slot" id="adSlotPrimary">
+          Ad space reserved
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>About Gold Coast Tide Times</h2>
+        <p>
+          This page shows daily Gold Coast tide times together with sunrise, sunset,
+          UV index and moon phase. Tide information is based on the nearest available
+          Queensland tide station.
+        </p>
+      </section>
+
+      <section class="card">
+        <h2>Popular Locations</h2>
+        <div class="location-links">
+          <a href="/brisbane-tide-times.html">Brisbane Tide Times</a>
+          <a href="/gold-coast-tide-times.html">Gold Coast Tide Times</a>
+          <a href="/sunshine-coast-tide-times.html">Sunshine Coast Tide Times</a>
+        </div>
+      </section>
+    </main>
 
     <footer class="foot muted">
       Data sources: sunrise-sunset.org • open-meteo • Queensland Government tide predictions
     </footer>
   </div>
+
+  <script>
+    const PAGE_LOCATION = {
+      name: "Gold Coast",
+      lat: -27.96,
+      lon: 153.43
+    };
+  </script>
+  <script src="/location-page.js?v=1"></script>
 </body>
 </html>
